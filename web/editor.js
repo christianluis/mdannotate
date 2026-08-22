@@ -850,7 +850,7 @@ export class Editor {
   focus() {
     const first = this.root.firstElementChild;
     if (first) setCaret(first, 0);
-    this.root.focus();
+    this.root.focus({ preventScroll: true });
   }
 }
 

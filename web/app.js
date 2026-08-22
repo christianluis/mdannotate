@@ -9,6 +9,7 @@ if (token) sessionStorage.setItem('mda.token', token);
 const $ = (id) => document.getElementById(id);
 const treeEl = $('tree');
 const docEl = $('doc');
+const pageEl = $('page');
 const emptyEl = $('empty');
 const statusEl = $('status');
 const marksEl = $('markCount');
@@ -186,7 +187,10 @@ function updateRowCount(path, marks) {
 // ---------------------------------------------------------------- Datei
 
 async function openFile(path) {
-  if (current && current !== path) await flush();
+  const wechsel = path !== current;
+  // Beim Nachladen derselben Datei bleibt die Leseposition stehen.
+  const scroll = wechsel ? 0 : pageEl.scrollTop;
+  if (current && wechsel) await flush();
   const r = await api(`/api/file?path=${encodeURIComponent(path)}`);
   const data = await r.json();
 
@@ -206,7 +210,13 @@ async function openFile(path) {
   markCurrentRow();
   localStorage.setItem(lastKey(), path);
   history.replaceState(null, '', '#' + encodeURIComponent(path));
-  ed.focus();
+
+  // Eine neue Datei fängt oben an, nicht dort, wo die letzte aufhörte.
+  pageEl.scrollTop = scroll;
+  if (wechsel) {
+    ed.focus();
+    pageEl.scrollTop = 0;
+  }
 }
 
 function drawCrumbs(path) {
