@@ -4,6 +4,7 @@ package server
 // Sitzung abgelegt hat und was Git kennt — alles in einer Zeitleiste.
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"sort"
@@ -22,6 +23,16 @@ type versionList struct {
 	Git      bool              `json:"git"`
 	Changes  string            `json:"changes"`
 	Versions []history.Version `json:"versions"`
+}
+
+type diffBody struct {
+	Path    string          `json:"path"`
+	A       string          `json:"a"`
+	B       string          `json:"b"`
+	Text    string          `json:"text"`
+	Removed []annotate.Span `json:"removed"`
+	Added   []annotate.Span `json:"added"`
+	Places  int             `json:"places"`
 }
 
 type versionBody struct {
@@ -69,24 +80,7 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.URL.Query().Get("id")
-
-	var raw string
-	switch {
-	case id == "live":
-		b, rerr := os.ReadFile(abs)
-		if rerr != nil {
-			http.Error(w, rerr.Error(), http.StatusNotFound)
-			return
-		}
-		raw = string(b)
-	case strings.HasPrefix(id, "snap:"):
-		raw, err = s.Store.Read(rel, strings.TrimPrefix(id, "snap:"))
-	case strings.HasPrefix(id, "git:"):
-		raw, err = s.Git.Show(rel, strings.TrimPrefix(id, "git:"))
-	default:
-		http.Error(w, "unbekannte Fassung", http.StatusBadRequest)
-		return
-	}
+	raw, err := s.versionRaw(rel, abs, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -98,6 +92,53 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		regions = []annotate.Region{}
 	}
 	writeJSON(w, versionBody{Path: rel, ID: id, Text: doc.Text(), Regions: regions, Marks: len(regions)})
+}
+
+// handleDiff stellt zwei Fassungen nebeneinander: a ist die aeltere, b die,
+// die gerade angesehen wird.
+func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("path")
+	abs, err := s.resolve(rel)
+	if err != nil || !isMarkdown(abs) {
+		http.Error(w, "ungueltiger Pfad", http.StatusBadRequest)
+		return
+	}
+	a, err := s.versionRaw(rel, abs, r.URL.Query().Get("a"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	b, err := s.versionRaw(rel, abs, r.URL.Query().Get("b"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	c := annotate.Compare(a, b)
+	writeJSON(w, diffBody{
+		Path:    rel,
+		A:       r.URL.Query().Get("a"),
+		B:       r.URL.Query().Get("b"),
+		Text:    c.Text,
+		Removed: c.Removed,
+		Added:   c.Added,
+		Places:  c.Places,
+	})
+}
+
+// versionRaw holt den Dateiinhalt einer Fassung, so wie er auf der Platte,
+// in der Ablage oder im Archiv steht — mit Marken, das Zerlegen kommt spaeter.
+func (s *Server) versionRaw(rel, abs, id string) (string, error) {
+	switch {
+	case id == "live":
+		b, err := os.ReadFile(abs)
+		return string(b), err
+	case strings.HasPrefix(id, "snap:"):
+		return s.Store.Read(rel, strings.TrimPrefix(id, "snap:"))
+	case strings.HasPrefix(id, "git:"):
+		return s.Git.Show(rel, strings.TrimPrefix(id, "git:"))
+	}
+	return "", errors.New("unbekannte Fassung")
 }
 
 // sortVersions stellt die juengste Fassung nach vorn. Fallen zwei auf

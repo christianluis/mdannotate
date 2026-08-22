@@ -323,6 +323,39 @@ export class Editor {
     }
   }
 
+  // applyDiff zeichnet einen Vergleich: im Text stehen beide Fassungen,
+  // was wegfiel direkt vor dem, was an seine Stelle trat.
+  applyDiff(added, removed) {
+    const { ranges } = this.serialize();
+    for (const el of this.root.children) {
+      el.classList.remove('chg', 'chg-head', 'gone', 'gone-head');
+      delete el.dataset.tag;
+      el.removeAttribute('title');
+    }
+
+    const paint = (spans, cls, tag, title) => {
+      for (const s of spans || []) {
+        const inside = ranges.filter((x) => x.start < s.end && x.end > s.start);
+        inside.forEach((x, k) => {
+          // Faellt beides auf denselben Block — etwa in einem Codeblock, den
+          // man nicht aufteilen kann —, gilt der neue Stand.
+          if (cls === 'chg' && x.el.classList.contains('gone')) {
+            x.el.classList.remove('gone', 'gone-head');
+            delete x.el.dataset.tag;
+          }
+          x.el.classList.add(cls);
+          if (k === 0 && !x.el.dataset.tag) {
+            x.el.classList.add(cls + '-head');
+            x.el.dataset.tag = tag;
+            x.el.title = title;
+          }
+        });
+      }
+    };
+    paint(removed, 'gone', 'weg', 'Diese Zeilen standen in der Fassung davor.');
+    paint(added, 'chg', 'neu', 'Diese Zeilen sind in dieser Fassung hinzugekommen.');
+  }
+
   // ------------------------------------------------------------ Ereignisse
 
   onMutate(muts) {

@@ -197,3 +197,46 @@ func TestApplyPlainLaesstBestehendeMarkeStehen(t *testing.T) {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func TestCompareStelltBeideFassungenNebeneinander(t *testing.T) {
+	alt := "# Plan\n\nEin Absatz, der bleibt.\n\nDer alte Schluss.\n"
+	neu := "# Plan\n\nEin Absatz, der bleibt.\n\nDer neue Schluss.\n\nUnd noch ein Satz.\n"
+
+	c := Compare(alt, neu)
+	lines := strings.Split(strings.TrimSuffix(c.Text, "\n"), "\n")
+
+	if len(c.Removed) != 1 || len(c.Added) != 1 {
+		t.Fatalf("eine Streichung und eine Ergaenzung erwartet: %+v", c)
+	}
+	if got := lines[c.Removed[0].Start:c.Removed[0].End]; len(got) != 1 || got[0] != "Der alte Schluss." {
+		t.Fatalf("falsche Streichung: %q", got)
+	}
+	got := lines[c.Added[0].Start:c.Added[0].End]
+	if len(got) != 3 || got[0] != "Der neue Schluss." || got[2] != "Und noch ein Satz." {
+		t.Fatalf("falsche Ergaenzung: %q", got)
+	}
+	if !strings.Contains(c.Text, "Ein Absatz, der bleibt.") {
+		t.Fatal("der unveraenderte Teil fehlt im Vergleich")
+	}
+}
+
+func TestCompareUebergehtDieMarken(t *testing.T) {
+	alt := "Ein Satz.\n"
+	neu := StartLine("wer", "2026-08-22T12:00:00+02:00") + "\nEin Satz.\n" +
+		EndLine("wer", "2026-08-22T12:00:00+02:00") + "\n"
+
+	c := Compare(alt, neu)
+	if len(c.Removed) != 0 || len(c.Added) != 0 {
+		t.Fatalf("eine gesetzte Marke ist kein Unterschied: %+v", c)
+	}
+	if c.Text != "Ein Satz.\n" {
+		t.Fatalf("der Vergleichstext traegt keine Marken: %q", c.Text)
+	}
+}
+
+func TestCompareOhneUnterschied(t *testing.T) {
+	c := Compare("gleich\n", "gleich\n")
+	if len(c.Removed) != 0 || len(c.Added) != 0 {
+		t.Fatalf("kein Unterschied erwartet: %+v", c)
+	}
+}

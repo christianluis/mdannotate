@@ -106,6 +106,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/file", s.guard(s.handleFile))
 	s.mux.HandleFunc("/api/versions", s.guard(s.handleVersions))
 	s.mux.HandleFunc("/api/version", s.guard(s.handleVersion))
+	s.mux.HandleFunc("/api/diff", s.guard(s.handleDiff))
 	s.mux.HandleFunc("/api/events", s.guard(s.handleEvents))
 	s.mux.HandleFunc("/asset", s.guard(s.handleAsset))
 	s.mux.HandleFunc("/", s.handleStatic)

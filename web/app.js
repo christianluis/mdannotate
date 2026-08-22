@@ -24,6 +24,7 @@ const shelfEl = $('shelf');
 const versionsEl = $('versions');
 const shelfFoot = $('shelfFoot');
 const versBtn = $('versBtn');
+const diffSel = $('diffSel');
 
 let cfg = {};
 let current = null;
@@ -41,8 +42,13 @@ const collapsed = new Set();
 // fruehere Fassung — solange sie steht, ist der Editor nur zum Lesen da.
 let versions = [];
 let viewing = null;
+// compared ist die Fassung, mit der die angesehene gerade verglichen wird.
+let compared = null;
 let shelfOpen = false;
 let vinfo = { git: false, changes: '' };
+// Womit eine angesehene Fassung verglichen wird: mit der vorigen, mit dem
+// Arbeitsstand oder mit nichts.
+let diffMode = 'prev';
 
 const ed = new Editor(docEl, { onChange: scheduleSave });
 
@@ -72,6 +78,14 @@ function setMarks(n) {
   marksEl.textContent = n === 1 ? '1 Marke' : `${n} Marken`;
 }
 
+// Im Vergleich zaehlt die Kopfzeile die Stellen, an denen sich etwas tut.
+function setChanges(n, gegen) {
+  marksEl.hidden = false;
+  marksEl.textContent = n === 0 ? 'keine Unterschiede'
+    : n === 1 ? '1 Unterschied' : `${n} Unterschiede`;
+  marksEl.title = gegen ? 'gegenüber ' + gegen : '';
+}
+
 function showBanner(text, actionLabel, action) {
   bannerText.textContent = text;
   bannerAction.textContent = actionLabel;
@@ -81,6 +95,7 @@ function showBanner(text, actionLabel, action) {
 
 function hideBanner() {
   bannerEl.hidden = true;
+  diffSel.hidden = true;
   for (const b of bannerEl.querySelectorAll('.extra')) b.remove();
   conflicted = false;
 }
@@ -207,6 +222,7 @@ async function openFile(path) {
   if (current && wechsel) await flush();
   // Wer eine Datei oeffnet, will sie bearbeiten, nicht eine alte Fassung lesen.
   viewing = null;
+  compared = null;
   ed.setReadOnly(false);
   pageEl.classList.remove('reading');
   const r = await api(`/api/file?path=${encodeURIComponent(path)}`);
@@ -486,6 +502,9 @@ function markVersionRow() {
   const id = viewing ? viewing.id : 'live';
   for (const el of versionsEl.querySelectorAll('.vrow')) {
     el.classList.toggle('current', el.dataset.id === id);
+    const base = !!compared && el.dataset.id === compared.id;
+    el.classList.toggle('base', base);
+    if (base) el.title = 'Damit wird verglichen';
   }
 }
 
@@ -496,10 +515,15 @@ async function showVersion(v) {
   if (v.kind === 'live') { await backToWork(); return; }
   await flush();
 
-  let data;
+  const base = diffBase(v);
+  const q = `path=${encodeURIComponent(current)}`;
+  let data, diff = null;
   try {
-    const r = await api(`/api/version?path=${encodeURIComponent(current)}&id=${encodeURIComponent(v.id)}`);
-    data = await r.json();
+    if (base) {
+      diff = await (await api(`/api/diff?${q}&a=${encodeURIComponent(base.id)}&b=${encodeURIComponent(v.id)}`)).json();
+    } else {
+      data = await (await api(`/api/version?${q}&id=${encodeURIComponent(v.id)}`)).json();
+    }
   } catch (err) {
     setStatus('dirty', 'Fassung nicht lesbar: ' + err.message);
     return;
@@ -507,13 +531,24 @@ async function showVersion(v) {
 
   viewing = v;
   ed.setReadOnly(true);
-  ed.load(data.text, { dir: current.split('/').slice(0, -1).join('/'), token });
-  ed.applyRegions(data.regions);
-  setMarks(data.marks);
+  ed.load((diff || data).text, { dir: current.split('/').slice(0, -1).join('/'), token });
+
+  let caption = versionCaption(v);
+  if (diff) {
+    ed.applyDiff(diff.added, diff.removed);
+    setChanges(diff.places, baseName(base));
+  } else {
+    ed.applyRegions(data.regions);
+    setMarks(data.marks);
+    marksEl.title = '';
+    if (diffMode !== 'off') caption += ' · nichts zum Vergleichen';
+  }
+  compared = diff ? base : null;
   setStatus('reading', 'nur Ansicht');
 
   hideBanner();
-  showBanner(versionCaption(v), 'zum Arbeitsstand', backToWork);
+  showBanner(caption, 'Ansicht beenden', backToWork);
+  diffSel.hidden = false;
   addTakeButton();
   pageEl.classList.add('reading');
 
@@ -522,10 +557,42 @@ async function showVersion(v) {
   versionsEl.querySelector(`.vrow.current`)?.scrollIntoView({ block: 'nearest' });
 }
 
+// diffBase ist die Fassung, mit der verglichen wird — bei „zur vorigen“ die
+// nächstältere aus der Liste, sonst der Arbeitsstand.
+function diffBase(v) {
+  if (diffMode === 'off') return null;
+  if (diffMode === 'live') {
+    const live = versions.find((x) => x.kind === 'live');
+    return live && live.id !== v.id ? live : null;
+  }
+  const i = versions.findIndex((x) => x.id === v.id);
+  return i < 0 ? null : versions[i + 1] || null;
+}
+
+function baseName(v) {
+  if (!v) return '';
+  if (v.kind === 'live') return 'dem Arbeitsstand';
+  if (v.kind === 'git') return 'Commit ' + (v.note || '').split(' ')[0];
+  return 'der Fassung von ' + stamp(v.time, true);
+}
+
+// Der Wahlschalter gilt sofort: die angesehene Fassung wird neu gezeichnet.
+function applyDiffMode(mode) {
+  diffMode = ['prev', 'live', 'off'].includes(mode) ? mode : 'prev';
+  diffSel.value = diffMode;
+  localStorage.setItem('mda.diff', diffMode);
+}
+
+diffSel.addEventListener('change', () => {
+  applyDiffMode(diffSel.value);
+  if (viewing) showVersion(viewing);
+});
+
 // backToWork holt zurueck, was auf der Platte steht.
 async function backToWork() {
   if (!viewing) return;
   viewing = null;
+  compared = null;
   ed.setReadOnly(false);
   pageEl.classList.remove('reading');
   hideBanner();
@@ -539,13 +606,28 @@ function addTakeButton() {
   const b = document.createElement('button');
   b.className = 'link-btn extra';
   b.textContent = 'diese Fassung übernehmen';
-  b.addEventListener('click', () => {
-    if (!viewing) return;
+  b.addEventListener('click', async () => {
+    const v = viewing;
+    if (!v) return;
+    // Im Vergleich stehen beide Fassungen im Editor. Übernommen wird die
+    // angesehene, also wird sie noch einmal für sich geholt.
+    let text;
+    try {
+      const r = await api(`/api/version?path=${encodeURIComponent(current)}&id=${encodeURIComponent(v.id)}`);
+      text = (await r.json()).text;
+    } catch (err) {
+      setStatus('dirty', 'Fassung nicht lesbar: ' + err.message);
+      return;
+    }
+
     viewing = null;
+    compared = null;
     ed.setReadOnly(false);
     pageEl.classList.remove('reading');
+    ed.load(text, { dir: current.split('/').slice(0, -1).join('/'), token });
     ed.applyRegions([]);
     hideBanner();
+    markVersionRow();
     setStatus('dirty', 'ungesichert');
     ed.focus();
     save();
@@ -617,7 +699,7 @@ document.addEventListener('keydown', (e) => {
 
   // Solange eine fruehere Fassung im Editor liegt, blaettern die Pfeile
   // darin weiter; der Text selbst ruehrt sich ohnehin nicht.
-  if (viewing && !mod2 && !inFilter) {
+  if (viewing && !mod2 && !inFilter && document.activeElement !== diffSel) {
     if (e.key === 'ArrowDown') { e.preventDefault(); stepVersion(1); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); stepVersion(-1); return; }
   }
@@ -651,6 +733,7 @@ async function start() {
 
   await loadTree();
   listen();
+  applyDiffMode(localStorage.getItem('mda.diff') || 'prev');
   toggleShelf(localStorage.getItem('mda.shelf') === 'on');
 
   const wanted = decodeURIComponent(location.hash.slice(1)) || localStorage.getItem(lastKey());

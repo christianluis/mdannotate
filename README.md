@@ -112,13 +112,29 @@ geöffnete Datei eine einzige Zeitleiste, von jetzt nach früher:
   mit, ältere Commits zeigen die Datei also auch unter ihrem alten Pfad.
 
 Ein Klick legt die gewählte Fassung in den Editor: grau hinterlegt und
-schreibgeschützt, die Randmarken jener Fassung inklusive. `↑` und `↓` blättern
-von dort weiter, `Esc` führt zurück zum Arbeitsstand. Solange eine alte Fassung
-im Editor liegt, schreibt `mda` nichts in die Datei.
+schreibgeschützt. `↑` und `↓` blättern von dort weiter, `Esc` führt zurück zum
+Arbeitsstand. Solange eine alte Fassung im Editor liegt, schreibt `mda` nichts
+in die Datei.
+
+Was sich geändert hat, steht dabei im Text selbst: durchgestrichen und blass,
+was wegfiel, direkt darüber, was an seine Stelle trat — beides mit einem Balken
+im Rand und den Kürzeln **weg** und **neu**. Der Wahlschalter im Balken sagt,
+womit verglichen wird:
+
+| | |
+| --- | --- |
+| zur vorigen Fassung | was diese Fassung gebracht hat |
+| zum Arbeitsstand | was du hättest, wenn du sie zurückholst |
+| ohne Vergleich | die Fassung für sich, mit ihren Annotationsmarken |
+
+Oben in der Kopfzeile steht, an wie vielen Stellen sich etwas tut; im Regal ist
+die Fassung, gegen die verglichen wird, gestrichelt umrandet. Die Einstellung
+merkt sich der Browser.
 
 Was Ungesichertes im Editor stand, wird vor dem Blättern gesichert. Wer eine
-alte Fassung zurückholen will, klickt „diese Fassung übernehmen“: ihr Text wird
-zum neuen Text der Datei und beim Sichern ganz normal mit Marken versehen.
+alte Fassung zurückholen will, klickt „diese Fassung übernehmen“: ihr Text —
+nicht der Vergleich — wird zum neuen Text der Datei und beim Sichern ganz normal
+mit Marken versehen.
 
 Die Fassungen der Sitzung liegen außerhalb des Projekts, damit sie dort nichts
 durcheinanderbringen:
@@ -215,7 +231,7 @@ Spalten stehen 21 zu 34 — auch das wieder φ.
 
 ```
 cmd/mda/            Programmstart, Kommandozeile, Terminalausgabe
-internal/annotate/  Marken lesen, Diff, Datei neu schreiben
+internal/annotate/  Marken lesen, Diff, Fassungen vergleichen, Datei schreiben
 internal/history/   Fassungen ablegen, Commits aus Git holen
 internal/server/    JSON-API, Dateibaum, Live-Aktualisierung
 web/                eingebettete Oberfläche (HTML, CSS, zwei Module)

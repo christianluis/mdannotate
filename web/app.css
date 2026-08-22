@@ -324,14 +324,26 @@ body {
 .banner {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
   padding: var(--sp-3) var(--sp-5);
   background: var(--paper-3);
   border-bottom: 1px solid var(--rule);
   font-size: var(--fs--1);
   color: var(--ink-2);
 }
+/* Der Wahlschalter im Balken sagt, womit die Fassung verglichen wird. */
+.picker {
+  font: inherit;
+  font-size: var(--fs--1);
+  color: var(--ink-2);
+  max-width: 18rem;
+}
+
+.banner > span { flex: 1 1 14rem; }
+
 .link-btn {
+  white-space: nowrap;
   border: 0;
   background: none;
   font: inherit;
@@ -403,6 +415,8 @@ body {
 }
 .vrow:hover { background: var(--paper-3); }
 .vrow.current { background: var(--mark-soft); }
+/* Die Fassung, mit der gerade verglichen wird. */
+.vrow.base { outline: 1px dashed var(--mark-rule); outline-offset: -1px; }
 
 .vdot {
   grid-row: 1 / span 2;
@@ -687,6 +701,49 @@ body {
 }
 .doc .li.ann-gap::before { top: var(--sp-3); }
 
+/* ------------------------------------------------------- Vergleich */
+
+/* Im Vergleich stehen beide Fassungen im selben Text. Was wegfiel, ist
+   durchgestrichen und blass; was kam, traegt einen Balken wie eine Marke. */
+.doc .chg::after,
+.doc .gone::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--sp-5) * -1 - var(--shift, 0px));
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--mark-rule);
+}
+.doc .gone::after { background: var(--warn); }
+
+.doc .gone {
+  color: var(--ink-3);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--warn);
+}
+
+/* Listenpunkte behalten ihr Zeichen; dort sagt der Balken allein Bescheid. */
+.doc .chg-head:not(.li)::before,
+.doc .gone-head:not(.li)::before {
+  content: attr(data-tag);
+  position: absolute;
+  left: calc(var(--gutter) * -1);
+  width: calc(var(--gutter) - var(--sp-6));
+  top: 0.15em;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: var(--fs--2);
+  font-style: normal;
+  text-decoration: none;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+  color: var(--mark);
+  pointer-events: none;
+}
+.doc .gone-head:not(.li)::before { color: var(--warn); }
+
 .doc .ann-new::after { animation: draw 260ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes draw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 
@@ -739,7 +796,9 @@ kbd {
 
 @media (max-width: 62rem) {
   :root { --gutter: var(--sp-6); }
-  .doc .ann.ann-head::before { display: none; }
+  .doc .ann.ann-head::before,
+  .doc .chg-head:not(.li)::before,
+  .doc .gone-head:not(.li)::before { display: none; }
 }
 
 @media (max-width: 48rem) {
