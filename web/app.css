@@ -1,0 +1,574 @@
+/* mda — Markdown mit Randmarken.
+   Das Dokument steht in der System-Serife, der Apparat drumherum in der
+   System-Grotesk. Alle Schriftgrade stehen im Verhaeltnis des Goldenen
+   Schnitts (Schritt = Wurzel aus phi, jeder zweite Schritt also phi). */
+
+:root {
+  --phi: 1.618;
+
+  /* Schriftgrade: 17px Basis, Schritt Wurzel(phi) = 1.27202 */
+  --fs--2: 0.6567rem;   /* 10.5px  Basis / phi        */
+  --fs--1: 0.8353rem;   /* 13.4px  Basis / Wurzel(phi) */
+  --fs-0:  1.0625rem;   /* 17.0px  Basis               */
+  --fs-1:  1.3515rem;   /* 21.6px  Basis * Wurzel(phi) */
+  --fs-2:  1.7191rem;   /* 27.5px  Basis * phi         */
+  --fs-3:  2.1868rem;   /* 35.0px  Basis * phi^1,5     */
+  --fs-4:  2.7817rem;   /* 44.5px  Basis * phi^2       */
+
+  --lh:       1.618;
+  --lh-tight: 1.272;    /* 1,618 / Wurzel(phi) */
+
+  /* Abstaende, ebenfalls in phi-Schritten */
+  --sp-1: 0.236rem;
+  --sp-2: 0.382rem;
+  --sp-3: 0.618rem;
+  --sp-4: 1rem;
+  --sp-5: 1.618rem;
+  --sp-6: 2.618rem;
+  --sp-7: 4.236rem;
+
+  /* Raster: 21 zu 34 ist wieder phi */
+  --rail:    21rem;
+  --measure: 34rem;
+  --gutter:  8rem;
+
+  --sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --serif: ui-serif, "New York", Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --paper:    #FDFDFC;
+  --paper-2:  #EFF0EC;
+  --paper-3:  #E7E9E3;
+  --ink:      #15161A;
+  --ink-2:    #56585F;
+  --ink-3:    #8B8D95;
+  --rule:     #DEDFD9;
+  --mark:     #3B45C4;
+  --mark-ink: #2C349B;
+  --mark-soft: rgba(59, 69, 196, 0.055);
+  --mark-rule: #B7BBEB;
+  --warn:     #9A6510;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper:    #121317;
+  --paper-2:  #0E0F12;
+  --paper-3:  #1B1D22;
+  --ink:      #E7E8E3;
+  --ink-2:    #9B9DA4;
+  --ink-3:    #6A6C74;
+  --rule:     #262930;
+  --mark:     #939AFF;
+  --mark-ink: #AEB3FF;
+  --mark-soft: rgba(147, 154, 255, 0.085);
+  --mark-rule: #565C8C;
+  --warn:     #D9A441;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--fs-0);
+  line-height: var(--lh);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mark);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------- Rail */
+
+.rail {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  background: var(--paper-2);
+  border-right: 1px solid var(--rule);
+}
+
+.rail-head {
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.rail-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.rail-root {
+  font-size: var(--fs--1);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: var(--fs-0);
+  line-height: 1;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.icon-btn:hover { color: var(--ink); background: var(--paper-3); }
+
+.filter {
+  width: 100%;
+  font: inherit;
+  font-size: var(--fs--1);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: var(--sp-2) var(--sp-3);
+  -webkit-appearance: none;
+}
+.filter::placeholder { color: var(--ink-3); }
+
+.tree {
+  overflow-y: auto;
+  padding: 0 var(--sp-3) var(--sp-5);
+  font-size: var(--fs--1);
+}
+
+.tree-kids {
+  margin-left: var(--sp-4);
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--rule);
+}
+.tree-group.closed > .tree-kids { display: none; }
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-2);
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 5px;
+  cursor: pointer;
+  line-height: var(--lh-tight);
+}
+.row:hover { background: var(--paper-3); color: var(--ink); }
+
+.row.dir {
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  font-size: var(--fs--2);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.row.file.current {
+  background: var(--mark-soft);
+  color: var(--mark-ink);
+  font-weight: 600;
+}
+
+.row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.row .caret {
+  width: 0.8em;
+  flex: none;
+  font-size: var(--fs--1);
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+.tree-group.closed .caret { transform: rotate(-90deg); }
+
+/* Die Zahl sagt, wie viele Passagen in dieser Datei markiert sind. */
+.row .count {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs--2);
+  color: var(--mark);
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-foot {
+  padding: var(--sp-3) var(--sp-5) var(--sp-5);
+  border-top: 1px solid var(--rule);
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font-size: var(--fs--2);
+}
+.rail-foot .tag { color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; }
+.rail-foot .who { font-family: var(--mono); color: var(--mark); }
+
+/* --------------------------------------------------------------- Sheet */
+
+.sheet {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--fs--2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  min-height: calc(var(--sp-6) + var(--sp-2));
+}
+
+.crumbs { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumbs .sep { padding: 0 var(--sp-2); color: var(--rule); }
+.crumbs .leaf { color: var(--ink); font-weight: 600; }
+
+.head-right { display: flex; align-items: center; gap: var(--sp-4); flex: none; }
+
+.marks { color: var(--mark); font-family: var(--mono); text-transform: none; letter-spacing: 0; }
+
+.status { font-variant-numeric: tabular-nums; }
+.status[data-state="dirty"] { color: var(--warn); }
+.status[data-state="saved"] { color: var(--mark); }
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--paper-3);
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--fs--1);
+  color: var(--ink-2);
+}
+.link-btn {
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--mark);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+
+.page {
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, var(--measure)) minmax(var(--sp-5), 1fr);
+  align-content: start;
+  padding-block: var(--sp-7) 60vh;
+}
+
+/* ------------------------------------------------------------ Dokument */
+
+.doc {
+  grid-column: 2;
+  font-family: var(--serif);
+  font-size: var(--fs-0);
+  line-height: var(--lh);
+  color: var(--ink);
+  outline: none;
+  overflow-wrap: break-word;
+}
+
+.doc > * { position: relative; margin: 0; }
+.doc > * + * { margin-top: var(--sp-5); }
+
+.doc h1, .doc h2, .doc h3, .doc h4, .doc h5, .doc h6 {
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  letter-spacing: -0.011em;
+  text-wrap: balance;
+}
+.doc h1 { font-size: var(--fs-4); letter-spacing: -0.02em; }
+.doc h2 { font-size: var(--fs-3); letter-spacing: -0.016em; }
+.doc h3 { font-size: var(--fs-2); }
+.doc h4 { font-size: var(--fs-1); }
+.doc h5 { font-size: var(--fs-0); }
+.doc h6 { font-size: var(--fs--1); color: var(--ink-2); letter-spacing: 0.04em; text-transform: uppercase; }
+
+.doc > * + h1, .doc > * + h2 { margin-top: var(--sp-7); }
+.doc > * + h3, .doc > * + h4 { margin-top: var(--sp-6); }
+
+.doc blockquote {
+  padding-left: var(--sp-5);
+  border-left: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-style: italic;
+}
+.doc blockquote[data-level="2"] { margin-left: var(--sp-5); }
+.doc blockquote[data-level="3"] { margin-left: var(--sp-6); }
+.doc blockquote[data-level="4"] { margin-left: var(--sp-7); }
+
+.doc .li {
+  padding-left: var(--sp-6);
+  margin-left: calc(var(--indent, 0) * var(--sp-6));
+}
+.doc .li + .li { margin-top: var(--sp-3); }
+
+.doc .li::before {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--sp-6) - var(--sp-4));
+  text-align: right;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--fs-0);
+  line-height: var(--lh);
+  content: "\2022";
+}
+.doc .li[data-ordered]::before {
+  content: attr(data-num) ".";
+  font-size: var(--fs--1);
+  /* absolut, damit die Ziffer trotz kleinerer Schrift auf der Grundlinie sitzt */
+  line-height: calc(var(--fs-0) * var(--lh));
+  font-variant-numeric: tabular-nums;
+}
+.doc .li[data-check]::before {
+  content: "";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: calc(var(--fs-0) * var(--lh) * 0.5 - 0.5em);
+  left: calc(var(--sp-6) - var(--sp-4) - 1em);
+  width: 1em;
+  height: 1em;
+  border: 1.5px solid var(--ink-3);
+  border-radius: 3px;
+}
+.doc .li[data-check="1"]::before {
+  content: "\2713";
+  font-size: 0.78em;
+  line-height: 1;
+  color: var(--mark);
+  border-color: var(--mark);
+  text-decoration: none;
+}
+.doc .li[data-check="1"] { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--rule); }
+
+.doc pre {
+  font-family: var(--mono);
+  font-size: var(--fs--1);
+  line-height: var(--lh-tight);
+  background: var(--paper-3);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: var(--sp-4);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 2;
+}
+/* Damit die Einfuegemarke auf einer neuen letzten Zeile sichtbar bleibt. */
+.doc pre.code::after { content: "\200B"; }
+
+.doc pre[data-lang]:not([data-lang=""])::before {
+  content: attr(data-lang);
+  display: block;
+  font-size: var(--fs--2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: var(--sp-3);
+}
+.doc pre.front {
+  background: none;
+  border: 0;
+  border-left: 2px solid var(--rule);
+  border-radius: 0;
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-4);
+  color: var(--ink-3);
+  font-size: var(--fs--2);
+}
+
+.doc .rule {
+  height: var(--sp-5);
+  display: flex;
+  align-items: center;
+}
+.doc .rule::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--rule);
+}
+
+.doc table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--sans);
+  font-size: var(--fs--1);
+}
+.doc th, .doc td {
+  border-bottom: 1px solid var(--rule);
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) 0;
+  text-align: left;
+  vertical-align: top;
+}
+.doc th { color: var(--ink-2); font-weight: 600; letter-spacing: 0.03em; }
+.doc tbody tr:last-child td { border-bottom: 0; }
+
+.doc a { color: var(--mark); text-decoration-color: var(--mark-rule); text-underline-offset: 2px; }
+.doc code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--paper-3);
+  border-radius: 4px;
+  padding: 0.1em 0.32em;
+}
+.doc pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+.doc img { max-width: 100%; border-radius: 4px; display: block; }
+.doc strong { font-weight: 650; }
+.doc s { color: var(--ink-3); }
+
+/* ----------------------------------------------------- Randmarken */
+
+/* Die Aenderungsmarke im Rand — der Balken traegt die Aussage, der Text
+   bleibt unangetastet. Ueber mehrere Bloecke laeuft der Balken durch. */
+.doc .ann::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--sp-5) * -1 - var(--shift, 0px));
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--mark-rule);
+  transform-origin: top;
+}
+
+/* Eingerueckte Bloecke schieben ihre Marke wieder an den Satzspiegel zurueck. */
+.doc .li                         { --shift: calc(var(--indent, 0) * var(--sp-6)); }
+.doc blockquote[data-level="2"]  { --shift: var(--sp-5); }
+.doc blockquote[data-level="3"]  { --shift: var(--sp-6); }
+.doc blockquote[data-level="4"]  { --shift: var(--sp-7); }
+
+/* Folgebloecke ziehen den Balken grosszuegig nach oben durch; die Farbe ist
+   deckend, Ueberlappung faellt daher nicht auf. */
+.doc .ann-cont::after { top: calc(var(--sp-7) * -1); }
+
+.doc .ann.ann-head::before {
+  content: attr(data-tag);
+  position: absolute;
+  left: calc(var(--gutter) * -1);
+  width: calc(var(--gutter) - var(--sp-6));
+  top: 0.15em;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: var(--fs--2);
+  font-style: normal;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+  color: var(--mark);
+  white-space: pre-line;
+  pointer-events: none;
+}
+
+/* Eine Marke ohne Inhalt: hier stand etwas, das entfernt wurde. */
+.doc .ann-gap {
+  border-top: 1px dashed var(--mark-rule);
+  padding-top: var(--sp-3);
+}
+.doc .li.ann-gap::before { top: var(--sp-3); }
+
+.doc .ann-new::after { animation: draw 260ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes draw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+/* --------------------------------------------------------- Leerzustand */
+
+.empty {
+  grid-column: 2;
+  max-width: var(--measure);
+}
+.empty-title {
+  font-family: var(--serif);
+  font-size: var(--fs-3);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.016em;
+  font-weight: 600;
+  margin: 0 0 var(--sp-5);
+  text-wrap: balance;
+}
+.empty-lead {
+  font-family: var(--serif);
+  font-size: var(--fs-1);
+  line-height: var(--lh);
+  color: var(--ink-2);
+  margin: 0 0 var(--sp-7);
+  text-wrap: pretty;
+}
+.keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-3) var(--sp-5);
+  margin: 0;
+  font-size: var(--fs--1);
+  color: var(--ink-2);
+  align-items: baseline;
+}
+.keys dt { white-space: nowrap; }
+.keys dd { margin: 0; }
+kbd {
+  font-family: var(--mono);
+  font-size: var(--fs--2);
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  background: var(--paper-2);
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------ Schmaler */
+
+@media (max-width: 62rem) {
+  :root { --gutter: var(--sp-6); }
+  .doc .ann.ann-head::before { display: none; }
+}
+
+@media (max-width: 48rem) {
+  :root { --rail: 100%; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .rail { border-right: 0; border-bottom: 1px solid var(--rule); max-height: 40vh; }
+  .page { padding-block: var(--sp-5) 40vh; grid-template-columns: var(--sp-5) minmax(0, 1fr) var(--sp-5); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mda</title>
+<link rel="stylesheet" href="app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%233B45C4'/><rect x='4' y='3.5' width='2' height='9' fill='white'/><rect x='7.5' y='5.5' width='5' height='1.4' fill='white'/><rect x='7.5' y='9' width='5' height='1.4' fill='white'/></svg>">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="rail">
+    <header class="rail-head">
+      <div class="rail-title">
+        <span class="rail-root" id="rootName">…</span>
+        <button class="icon-btn" id="themeBtn" title="Darstellung wechseln" aria-label="Darstellung wechseln">◐</button>
+      </div>
+      <input id="filter" class="filter" type="search" placeholder="Dateien filtern" autocomplete="off" spellcheck="false">
+    </header>
+    <nav id="tree" class="tree" aria-label="Markdown-Dateien"></nav>
+    <footer class="rail-foot">
+      <span class="tag">Marken als</span>
+      <span class="who" id="whoName">…</span>
+    </footer>
+  </aside>
+
+  <main class="sheet">
+    <header class="sheet-head">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="head-right">
+        <span class="marks" id="markCount" hidden></span>
+        <span class="status" id="status">bereit</span>
+      </div>
+    </header>
+
+    <div class="banner" id="banner" hidden>
+      <span id="bannerText"></span>
+      <button class="link-btn" id="bannerAction">neu laden</button>
+    </div>
+
+    <div class="page" id="page">
+      <article id="doc" class="doc" spellcheck="true" hidden></article>
+
+      <section class="empty" id="empty">
+        <h1 class="empty-title">Markdown mit Randmarken</h1>
+        <p class="empty-lead">Jede Passage, die du hier änderst, wird in der Datei
+          mit einer Start- und einer Endmarke eingefasst — Name und Zeitstempel inklusive.
+          Die KI, mit der du dich abstimmst, sieht damit auf den ersten Blick, was von dir stammt.</p>
+        <dl class="keys">
+          <dt><kbd>#</kbd> <kbd>␣</kbd></dt><dd>Überschrift, bis <kbd>######</kbd></dd>
+          <dt><kbd>&gt;</kbd> <kbd>␣</kbd></dt><dd>Zitatebene, mehrfach für tiefer</dd>
+          <dt><kbd>-</kbd> <kbd>␣</kbd></dt><dd>Liste, <kbd>1.</kbd> für nummeriert</dd>
+          <dt><kbd>```</kbd></dt><dd>Codeblock</dd>
+          <dt><kbd>⌘</kbd><kbd>S</kbd></dt><dd>sofort sichern</dd>
+          <dt><kbd>⌘</kbd><kbd>P</kbd></dt><dd>Dateien filtern</dd>
+        </dl>
+      </section>
+    </div>
+  </main>
+
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
