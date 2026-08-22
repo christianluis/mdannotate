@@ -19,13 +19,7 @@ ein Balken im Seitenrand, daneben Kürzel und Zeitpunkt, so wie eine
 
 ## Installation
 
-Über Homebrew, direkt aus dem Git-Stand:
-
-```sh
-brew install --HEAD ./Formula/mda.rb
-```
-
-Als eigener Tap (dann liegt `mda` dauerhaft im Pfad):
+Über Homebrew:
 
 ```sh
 brew tap christianluis/mda https://github.com/christianluis/mdannotate
@@ -38,6 +32,31 @@ Ohne Homebrew:
 make install            # nach /usr/local/bin
 make install PREFIX=~/.local
 ```
+
+## Aktualisieren
+
+Es gibt noch keine festen Versionen, `mda` wird aus dem Git-Stand gebaut. Für
+solche Installationen prüft Homebrew nur auf ausdrückliche Aufforderung, ob es
+neue Commits gibt — `brew upgrade` allein meldet nichts:
+
+```sh
+brew update                       # holt den Stand des Taps
+brew upgrade --fetch-HEAD mda     # baut neu, wenn es neuere Commits gibt
+```
+
+Ob überhaupt etwas anliegt, sagt:
+
+```sh
+brew outdated --fetch-HEAD mda
+# christianluis/mda/mda (HEAD-7d24d94) < HEAD-71285ee
+```
+
+`mda -version` nennt den Commit, aus dem die installierte Fassung gebaut wurde.
+
+Sobald es Versionen mit Tag gibt, entfällt `--fetch-HEAD`. Dafür in
+`Formula/mda.rb` die beiden auskommentierten Zeilen für `url` und `sha256`
+füllen; den Prüfwert liefert `curl -sL <url> | shasum -a 256`. Danach genügt
+`brew upgrade mda`.
 
 ## Benutzung
 
