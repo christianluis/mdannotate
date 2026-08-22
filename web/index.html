@@ -30,6 +30,8 @@
     <header class="sheet-head">
       <div class="crumbs" id="crumbs"></div>
       <div class="head-right">
+        <button type="button" class="pill" id="versBtn" aria-pressed="false" aria-controls="shelf"
+                title="Frühere Fassungen ansehen (⌘⇧H)">Verlauf</button>
         <button type="button" class="switch" id="annBtn" aria-pressed="true">
           <span class="switch-dot"></span><span id="annLabel">Marken an</span>
         </button>
@@ -58,10 +60,21 @@
           <dt><kbd>```</kbd></dt><dd>Codeblock</dd>
           <dt><kbd>⌘</kbd><kbd>S</kbd></dt><dd>sofort sichern</dd>
           <dt><kbd>⌘</kbd><kbd>P</kbd></dt><dd>Dateien filtern</dd>
+          <dt><kbd>⌘</kbd><kbd>⇧</kbd><kbd>H</kbd></dt><dd>frühere Fassungen</dd>
         </dl>
       </section>
     </div>
   </main>
+
+  <!-- Die Fassungen der geoeffneten Datei: was mda abgelegt hat und was Git kennt. -->
+  <aside class="shelf" id="shelf" aria-label="Fassungen" hidden>
+    <header class="shelf-head">
+      <span class="shelf-title">Fassungen</span>
+      <button class="icon-btn" id="shelfClose" title="Verlauf schließen" aria-label="Verlauf schließen">✕</button>
+    </header>
+    <div class="shelf-list" id="versions"></div>
+    <footer class="shelf-foot" id="shelfFoot"></footer>
+  </aside>
 
 </div>
 

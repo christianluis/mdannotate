@@ -74,6 +74,7 @@ mda . -user "cl"        # anderer Name in den Marken
   Adresse   http://localhost:56825/?t=09d65a935c6f54153b35900d64283f520adcf5b94b281d54
   Ordner    ~/Projekte/mdannotate/beispiel  · 2 Markdown-Dateien
   Marken    als christianluis
+  Verlauf   ~/.mda/changes/beispiel-7c53dfcbe720  · mit Git
 
   Beenden mit Strg-C.
 
@@ -98,6 +99,46 @@ Einstellung gilt für den nächsten Speichervorgang und merkt sich der Browser.
 
 `mda` lauscht nur auf `127.0.0.1` und verlangt für jeden Zugriff ein Token,
 das beim Start erzeugt und in der geöffneten Adresse mitgegeben wird.
+
+## Frühere Fassungen
+
+Oben rechts steht **Verlauf** (`⌘⇧H`). Das Regal daneben zeigt für die
+geöffnete Datei eine einzige Zeitleiste, von jetzt nach früher:
+
+* den **Arbeitsstand** — das, was in diesem Augenblick in der Datei steht;
+* jede Fassung, die während der Sitzung entstanden ist: beim Sichern, und
+  ebenso, wenn eine KI die Datei von außen geschrieben hat;
+* jeden **Commit**, der die Datei angefasst hat. Umbenennungen verfolgt `mda`
+  mit, ältere Commits zeigen die Datei also auch unter ihrem alten Pfad.
+
+Ein Klick legt die gewählte Fassung in den Editor: grau hinterlegt und
+schreibgeschützt, die Randmarken jener Fassung inklusive. `↑` und `↓` blättern
+von dort weiter, `Esc` führt zurück zum Arbeitsstand. Solange eine alte Fassung
+im Editor liegt, schreibt `mda` nichts in die Datei.
+
+Was Ungesichertes im Editor stand, wird vor dem Blättern gesichert. Wer eine
+alte Fassung zurückholen will, klickt „diese Fassung übernehmen“: ihr Text wird
+zum neuen Text der Datei und beim Sichern ganz normal mit Marken versehen.
+
+Die Fassungen der Sitzung liegen außerhalb des Projekts, damit sie dort nichts
+durcheinanderbringen:
+
+```
+~/.mda/changes/beispiel-7c53dfcbe720/notizen/termin.md/20260822-154321.472-mda.md
+               └── Ordnername und Abdruck des vollen Pfades
+                                     └── Pfad der Datei im Projekt
+                                                       └── Zeitpunkt und Herkunft
+```
+
+Der Abdruck ist der Anfang des SHA-256 über den vollen Pfad; zwei gleichnamige
+Ordner teilen sich also kein Fach. Die Endung sagt, woher die Fassung stammt:
+`-start` ist der Stand, den `mda` vorfand, `-mda` eine eigene Speicherung,
+`-extern` etwas, das von außen kam. Gleicht eine Fassung der vorigen, wird sie
+nicht abgelegt; je Datei bleiben die letzten 200 stehen. Aufgeräumt wird sonst
+nicht — der Ordner darf jederzeit gelöscht werden, `mda` legt ihn neu an.
+
+Ohne Git fehlen nur die Commits, der Rest bleibt. Die Kopfzeile beim Start
+sagt, welcher Ablageordner gilt und ob ein Archiv in Sicht ist.
 
 ## Schreiben
 
@@ -125,6 +166,7 @@ am Blockanfang nimmt die Auszeichnung zurück. `Tab` rückt Listenpunkte ein.
 | `⌘Z` / `⇧⌘Z` | rückgängig / wiederherstellen |
 | `⌘B` `⌘I` `⌘K` | fett, kursiv, Verweis |
 | `⌘P` | Dateien filtern |
+| `⌘⇧H` | Verlauf ein- und ausblenden |
 | `⇧Enter` | Zeilenumbruch, im Codeblock: Block verlassen |
 
 ## Wie die Marken gesetzt werden
@@ -174,6 +216,7 @@ Spalten stehen 21 zu 34 — auch das wieder φ.
 ```
 cmd/mda/            Programmstart, Kommandozeile, Terminalausgabe
 internal/annotate/  Marken lesen, Diff, Datei neu schreiben
+internal/history/   Fassungen ablegen, Commits aus Git holen
 internal/server/    JSON-API, Dateibaum, Live-Aktualisierung
 web/                eingebettete Oberfläche (HTML, CSS, zwei Module)
 ```

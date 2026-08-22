@@ -20,6 +20,10 @@ const bannerText = $('bannerText');
 const bannerAction = $('bannerAction');
 const annBtn = $('annBtn');
 const annLabel = $('annLabel');
+const shelfEl = $('shelf');
+const versionsEl = $('versions');
+const shelfFoot = $('shelfFoot');
+const versBtn = $('versBtn');
 
 let cfg = {};
 let current = null;
@@ -32,6 +36,13 @@ let saveTimer = 0;
 let marking = true;
 let files = [];
 const collapsed = new Set();
+
+// Fassungen der geoeffneten Datei. viewing ist die gerade angesehene
+// fruehere Fassung — solange sie steht, ist der Editor nur zum Lesen da.
+let versions = [];
+let viewing = null;
+let shelfOpen = false;
+let vinfo = { git: false, changes: '' };
 
 const ed = new Editor(docEl, { onChange: scheduleSave });
 
@@ -70,7 +81,7 @@ function showBanner(text, actionLabel, action) {
 
 function hideBanner() {
   bannerEl.hidden = true;
-  bannerEl.querySelector('.keep')?.remove();
+  for (const b of bannerEl.querySelectorAll('.extra')) b.remove();
   conflicted = false;
 }
 
@@ -194,6 +205,10 @@ async function openFile(path) {
   // Beim Nachladen derselben Datei bleibt die Leseposition stehen.
   const scroll = wechsel ? 0 : pageEl.scrollTop;
   if (current && wechsel) await flush();
+  // Wer eine Datei oeffnet, will sie bearbeiten, nicht eine alte Fassung lesen.
+  viewing = null;
+  ed.setReadOnly(false);
+  pageEl.classList.remove('reading');
   const r = await api(`/api/file?path=${encodeURIComponent(path)}`);
   const data = await r.json();
 
@@ -220,6 +235,7 @@ async function openFile(path) {
     ed.focus();
     pageEl.scrollTop = 0;
   }
+  if (shelfOpen) loadVersions();
 }
 
 function drawCrumbs(path) {
@@ -242,14 +258,14 @@ function drawCrumbs(path) {
 // --------------------------------------------------------------- Sichern
 
 function scheduleSave() {
-  if (!current) return;
+  if (!current || viewing) return;
   setStatus('dirty', 'ungesichert');
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 900);
 }
 
 async function save(force = false) {
-  if (!current) return;
+  if (!current || viewing) return;
   if (conflicted && !force) return;
   if (saving) { pending = true; return; }
 
@@ -286,6 +302,7 @@ async function save(force = false) {
     setMarks(data.marks);
     updateRowCount(current, data.marks);
     setStatus('saved', 'gesichert ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
+    if (shelfOpen) loadVersions();
   } catch (err) {
     setStatus('dirty', 'nicht gesichert: ' + err.message);
   } finally {
@@ -298,7 +315,7 @@ async function save(force = false) {
 function addKeepButton() {
   if (bannerEl.querySelector('.keep')) return;
   const b = document.createElement('button');
-  b.className = 'link-btn keep';
+  b.className = 'link-btn extra keep';
   b.textContent = 'eigene Fassung sichern';
   b.addEventListener('click', () => {
     b.remove();
@@ -310,7 +327,7 @@ function addKeepButton() {
 
 async function flush() {
   clearTimeout(saveTimer);
-  if (!current || conflicted) return;
+  if (!current || conflicted || viewing) return;
   const { text } = ed.serialize();
   if (text !== lastSaved) await save();
 }
@@ -334,6 +351,9 @@ function listen() {
 
     if (m.type === 'file') {
       if (m.path !== current) { loadTree().then(markCurrentRow); return; }
+      // Wer gerade eine alte Fassung liest, wird nicht unterbrochen; die
+      // neue Fassung taucht in der Liste auf.
+      if (viewing) { if (shelfOpen) loadVersions(); return; }
       const { text } = ed.serialize();
       if (text === lastSaved && !saving) {
         openFile(current).then(() => setStatus('', 'von außen aktualisiert'));
@@ -348,6 +368,203 @@ function listen() {
     }
   });
 }
+
+// ------------------------------------------------------------- Fassungen
+
+// Das Regal zeigt, was von einer Datei bekannt ist: der Arbeitsstand, die
+// Faenge dieser Sitzung aus ~/.mda/changes und die Commits aus Git. Ein Klick
+// legt eine davon in den Editor — zum Lesen, nicht zum Schreiben.
+
+function toggleShelf(on) {
+  shelfOpen = on === undefined ? !shelfOpen : on;
+  shelfEl.hidden = !shelfOpen;
+  versBtn.setAttribute('aria-pressed', String(shelfOpen));
+  localStorage.setItem('mda.shelf', shelfOpen ? 'on' : 'off');
+  if (shelfOpen) loadVersions();
+}
+
+async function loadVersions() {
+  if (!current) { versions = []; drawVersions(); return; }
+  try {
+    const d = await (await api(`/api/versions?path=${encodeURIComponent(current)}`)).json();
+    versions = d.versions || [];
+    vinfo = { git: d.git, changes: d.changes || '' };
+  } catch {
+    versions = [];
+  }
+  drawVersions();
+}
+
+function drawVersions() {
+  versionsEl.replaceChildren();
+  if (!current) {
+    versionsEl.appendChild(note('Erst eine Datei öffnen.'));
+  } else if (!versions.length) {
+    versionsEl.appendChild(note('Von dieser Datei ist noch keine Fassung bekannt.'));
+  } else {
+    for (const v of versions) versionsEl.appendChild(versionRow(v));
+  }
+  drawShelfFoot();
+  markVersionRow();
+}
+
+function note(text) {
+  const p = document.createElement('p');
+  p.className = 'shelf-note';
+  p.textContent = text;
+  return p;
+}
+
+function versionRow(v) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'vrow';
+  row.dataset.id = v.id;
+  row.dataset.kind = v.kind;
+
+  const dot = document.createElement('span');
+  dot.className = 'vdot';
+
+  const label = document.createElement('span');
+  label.className = 'vlabel';
+  label.textContent = v.label;
+
+  const meta = document.createElement('span');
+  meta.className = 'vmeta';
+  meta.textContent = [stamp(v.time, v.kind !== 'git'), v.note].filter(Boolean).join('  ');
+
+  row.append(dot, label, meta);
+  row.title = versionTitle(v);
+  row.addEventListener('click', () => showVersion(v));
+  return row;
+}
+
+function drawShelfFoot() {
+  shelfFoot.replaceChildren();
+  const lines = [];
+  if (vinfo.changes) lines.push('Fassungen dieser Sitzung: ' + tilde(vinfo.changes));
+  if (!vinfo.git) lines.push('Kein Git-Archiv in Sicht.');
+  for (const t of lines) {
+    const p = document.createElement('p');
+    p.textContent = t;
+    shelfFoot.appendChild(p);
+  }
+}
+
+// tilde kuerzt den Heimatordner weg; die Ablage liegt immer unter ~/.mda.
+const tilde = (path) => path.replace(/^.*(\/\.mda\/)/, '~$1');
+
+// stamp schreibt den Zeitpunkt: heute nur die Uhrzeit, sonst mit Datum.
+function stamp(iso, seconds) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  const opts = { hour: '2-digit', minute: '2-digit' };
+  if (seconds) opts.second = '2-digit';
+  const time = d.toLocaleTimeString('de-DE', opts);
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' ' + time;
+}
+
+function versionTitle(v) {
+  const when = stamp(v.time, v.kind !== 'git');
+  if (v.kind === 'git') return `Commit ${v.note || ''} · ${when} · ${v.label}`;
+  if (v.kind === 'live') return 'Der Stand, der jetzt in der Datei steht';
+  return `${v.label} · ${when}`;
+}
+
+// versionCaption steht im Balken ueber der angesehenen Fassung.
+function versionCaption(v) {
+  const when = stamp(v.time, v.kind !== 'git');
+  if (v.kind === 'git') {
+    const hash = (v.note || '').split(' ')[0];
+    return `Nur Ansicht: Commit ${hash} von ${when} · „${v.label}“`;
+  }
+  return `Nur Ansicht: Fassung von ${when} · ${v.label}`;
+}
+
+function markVersionRow() {
+  const id = viewing ? viewing.id : 'live';
+  for (const el of versionsEl.querySelectorAll('.vrow')) {
+    el.classList.toggle('current', el.dataset.id === id);
+  }
+}
+
+// showVersion legt eine fruehere Fassung in den Editor. Was im Editor stand,
+// ist vorher gesichert — im Lesemodus schreibt mda nichts mehr in die Datei.
+async function showVersion(v) {
+  if (!current || !v) return;
+  if (v.kind === 'live') { await backToWork(); return; }
+  await flush();
+
+  let data;
+  try {
+    const r = await api(`/api/version?path=${encodeURIComponent(current)}&id=${encodeURIComponent(v.id)}`);
+    data = await r.json();
+  } catch (err) {
+    setStatus('dirty', 'Fassung nicht lesbar: ' + err.message);
+    return;
+  }
+
+  viewing = v;
+  ed.setReadOnly(true);
+  ed.load(data.text, { dir: current.split('/').slice(0, -1).join('/'), token });
+  ed.applyRegions(data.regions);
+  setMarks(data.marks);
+  setStatus('reading', 'nur Ansicht');
+
+  hideBanner();
+  showBanner(versionCaption(v), 'zum Arbeitsstand', backToWork);
+  addTakeButton();
+  pageEl.classList.add('reading');
+
+  markVersionRow();
+  pageEl.scrollTop = 0;
+  versionsEl.querySelector(`.vrow.current`)?.scrollIntoView({ block: 'nearest' });
+}
+
+// backToWork holt zurueck, was auf der Platte steht.
+async function backToWork() {
+  if (!viewing) return;
+  viewing = null;
+  ed.setReadOnly(false);
+  pageEl.classList.remove('reading');
+  hideBanner();
+  await openFile(current);
+  markVersionRow();
+}
+
+// addTakeButton uebernimmt die angesehene Fassung als neuen Text. Gesichert
+// wird sie wie jede andere Änderung, also mit Marken, wenn der Schalter steht.
+function addTakeButton() {
+  const b = document.createElement('button');
+  b.className = 'link-btn extra';
+  b.textContent = 'diese Fassung übernehmen';
+  b.addEventListener('click', () => {
+    if (!viewing) return;
+    viewing = null;
+    ed.setReadOnly(false);
+    pageEl.classList.remove('reading');
+    ed.applyRegions([]);
+    hideBanner();
+    setStatus('dirty', 'ungesichert');
+    ed.focus();
+    save();
+  });
+  bannerEl.appendChild(b);
+}
+
+// stepVersion blaettert in der Liste: nach unten in die Vergangenheit.
+function stepVersion(delta) {
+  if (!versions.length) return;
+  const id = viewing ? viewing.id : 'live';
+  let i = versions.findIndex((v) => v.id === id);
+  if (i < 0) i = 0;
+  const next = versions[Math.min(versions.length - 1, Math.max(0, i + delta))];
+  if (next && next.id !== id) showVersion(next);
+}
+
+versBtn.addEventListener('click', () => toggleShelf());
+$('shelfClose').addEventListener('click', () => toggleShelf(false));
 
 // ---------------------------------------------------------- Marken an/aus
 
@@ -393,9 +610,20 @@ filterEl.addEventListener('input', () => {
 
 document.addEventListener('keydown', (e) => {
   const mod2 = e.metaKey || e.ctrlKey;
+  const inFilter = document.activeElement === filterEl;
+  if (mod2 && e.shiftKey && e.key.toLowerCase() === 'h') { e.preventDefault(); toggleShelf(); return; }
   if (mod2 && e.key.toLowerCase() === 's') { e.preventDefault(); clearTimeout(saveTimer); save(); }
   if (mod2 && e.key.toLowerCase() === 'p') { e.preventDefault(); filterEl.focus(); filterEl.select(); }
-  if (e.key === 'Escape' && document.activeElement === filterEl) {
+
+  // Solange eine fruehere Fassung im Editor liegt, blaettern die Pfeile
+  // darin weiter; der Text selbst ruehrt sich ohnehin nicht.
+  if (viewing && !mod2 && !inFilter) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); stepVersion(1); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); stepVersion(-1); return; }
+  }
+  if (e.key === 'Escape' && viewing && !inFilter) { e.preventDefault(); backToWork(); return; }
+
+  if (e.key === 'Escape' && inFilter) {
     filterEl.value = '';
     if (treeRoot) drawTree(treeRoot);
     ed.focus();
@@ -407,6 +635,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('beforeunload', (e) => {
+  if (viewing) return;
   const { text } = ed.serialize();
   if (current && text !== lastSaved) { e.preventDefault(); e.returnValue = ''; }
 });
@@ -422,6 +651,7 @@ async function start() {
 
   await loadTree();
   listen();
+  toggleShelf(localStorage.getItem('mda.shelf') === 'on');
 
   const wanted = decodeURIComponent(location.hash.slice(1)) || localStorage.getItem(lastKey());
   if (wanted && files.some((f) => f.path === wanted)) await openFile(wanted);

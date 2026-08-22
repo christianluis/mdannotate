@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/christianluis/mdannotate/internal/annotate"
+	"github.com/christianluis/mdannotate/internal/history"
 	"github.com/christianluis/mdannotate/web"
 )
 
@@ -30,6 +31,11 @@ type Server struct {
 	Root  string
 	User  string
 	Token string
+
+	// Store legt jede Fassung unter ~/.mda/changes ab, Git liefert die
+	// Fassungen aus dem Archiv. Beide duerfen fehlen.
+	Store *history.Store
+	Git   *history.Repo
 
 	// OnSave und OnExternal melden dem Programm, was passiert ist.
 	OnSave     func(path string, marks int, marked bool)
@@ -77,14 +83,29 @@ func New(root, user string) (*Server, error) {
 		clients:   map[chan string]struct{}{},
 		selfWrite: map[string]int64{},
 	}
+	// Beides ist Beiwerk: ohne Heimatordner gibt es keine Ablage, ohne
+	// Archiv keine Commits, und mda laeuft trotzdem.
+	s.Store, _ = history.Open(abs)
+	s.Git = history.FindRepo(abs)
+
 	s.routes()
 	return s, nil
+}
+
+// Changes ist der Ordner, in dem die Fassungen dieser Sitzung liegen.
+func (s *Server) Changes() string {
+	if s.Store == nil {
+		return ""
+	}
+	return s.Store.Dir
 }
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("/api/config", s.guard(s.handleConfig))
 	s.mux.HandleFunc("/api/tree", s.guard(s.handleTree))
 	s.mux.HandleFunc("/api/file", s.guard(s.handleFile))
+	s.mux.HandleFunc("/api/versions", s.guard(s.handleVersions))
+	s.mux.HandleFunc("/api/version", s.guard(s.handleVersion))
 	s.mux.HandleFunc("/api/events", s.guard(s.handleEvents))
 	s.mux.HandleFunc("/asset", s.guard(s.handleAsset))
 	s.mux.HandleFunc("/", s.handleStatic)
@@ -231,10 +252,16 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		} else {
 			doc = annotate.ApplyPlain(string(old), body.Text)
 		}
+		// Erst den Stand festhalten, wie mda ihn vorfand, dann schreiben und
+		// die neue Fassung ablegen. Gleiches legt der Store kein zweites Mal ab.
+		if err == nil {
+			s.Store.Save(rel, string(old), history.KindStart)
+		}
 		if err := writeAtomic(abs, doc.Raw()); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		s.Store.Save(rel, doc.Raw(), history.KindMda)
 		if info, serr := os.Stat(abs); serr == nil {
 			s.selfWrite[rel] = info.ModTime().UnixMilli()*997 + info.Size()
 		}
@@ -397,6 +424,13 @@ func (s *Server) Watch(interval time.Duration) {
 		for _, p := range external {
 			if s.OnExternal != nil {
 				s.OnExternal(p)
+			}
+			// Auch was von aussen kommt, gehoert in den Verlauf: sonst ist
+			// die Fassung weg, sobald die naechste Hand darueber geht.
+			if abs, rerr := s.resolve(p); rerr == nil {
+				if b, ferr := os.ReadFile(abs); ferr == nil {
+					s.Store.Save(p, string(b), history.KindExtern)
+				}
 			}
 			b, _ := json.Marshal(map[string]string{"type": "file", "path": p})
 			s.broadcast(string(b))

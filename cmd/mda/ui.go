@@ -57,7 +57,7 @@ func marks(n int) string {
 }
 
 // banner ist das, was beim Start im Terminal steht.
-func banner(version, url, root, user string, count int) {
+func banner(version, url, root, user, changes string, git bool, count int) {
 	row := func(label, value string) {
 		fmt.Printf("  %s%s\n", dim(pad(label, 10)), value)
 	}
@@ -66,6 +66,13 @@ func banner(version, url, root, user string, count int) {
 	row("Adresse", accent(url))
 	row("Ordner", short(root)+"  "+dim("· "+files(count)))
 	row("Marken", "als "+user)
+	if changes != "" {
+		note := "ohne Git"
+		if git {
+			note = "mit Git"
+		}
+		row("Verlauf", short(changes)+"  "+dim("· "+note))
+	}
 	fmt.Printf("\n  %s\n\n", dim("Beenden mit Strg-C."))
 }
 

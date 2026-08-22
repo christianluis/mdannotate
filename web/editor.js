@@ -65,6 +65,7 @@ export class Editor {
     this.history = [];
     this.future = [];
     this.snapTimer = 0;
+    this.readonly = false;
 
     root.setAttribute('contenteditable', 'true');
     this.mo = new MutationObserver((muts) => this.onMutate(muts));
@@ -76,6 +77,14 @@ export class Editor {
   }
 
   // --------------------------------------------------------- Aufbau
+
+  // Im Lesemodus zeigt der Editor eine fruehere Fassung: nichts laesst sich
+  // darin aendern, die Randmarken bleiben zu sehen.
+  setReadOnly(on) {
+    this.readonly = !!on;
+    this.root.setAttribute('contenteditable', on ? 'false' : 'true');
+    this.root.classList.toggle('reading', !!on);
+  }
 
   load(text, ctx) {
     this.ctx = ctx || this.ctx;
@@ -344,6 +353,7 @@ export class Editor {
   }
 
   onClick(e) {
+    if (this.readonly) return;
     // Auf einen Aufgabenhaken klicken schaltet ihn um.
     const li = e.target.closest?.('.li[data-check]');
     if (!li || !this.root.contains(li)) return;
@@ -358,6 +368,7 @@ export class Editor {
   }
 
   onKeyDown(e) {
+    if (this.readonly) return;
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
 
@@ -619,6 +630,7 @@ export class Editor {
   // Die Auszeichnung passiert vor der Eingabe: sonst setzt der Browser die
   // Auswahl nach dem Ereignis wieder zurueck und der Cursor geht verloren.
   onBeforeInput(e) {
+    if (this.readonly) { e.preventDefault(); return; }
     if (this.suspend) return;
     if (e.inputType !== 'insertText' || !e.data) return;
     const el = this.currentEl();
@@ -772,6 +784,7 @@ export class Editor {
   // ----------------------------------------------------------- Einfuegen
 
   onPaste(e) {
+    if (this.readonly) { e.preventDefault(); return; }
     const text = e.clipboardData?.getData('text/plain');
     if (text == null) return;
     e.preventDefault();

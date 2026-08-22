@@ -69,7 +69,7 @@ func main() {
 
 	go srv.Watch(700 * time.Millisecond)
 
-	banner(version, url, srv.Root, srv.User, srv.FileCount())
+	banner(version, url, srv.Root, srv.User, srv.Changes(), srv.Git != nil, srv.FileCount())
 
 	if !*noOpen {
 		go openBrowser(url)
