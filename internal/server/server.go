@@ -32,7 +32,7 @@ type Server struct {
 	Token string
 
 	// OnSave und OnExternal melden dem Programm, was passiert ist.
-	OnSave     func(path string, marks int)
+	OnSave     func(path string, marks int, marked bool)
 	OnExternal func(path string)
 
 	mux   *http.ServeMux
@@ -200,6 +200,9 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Text string `json:"text"`
 			Mod  int64  `json:"mod"`
+			// Annotate schaltet die Marken ab, wenn es ausdruecklich
+			// false ist. Fehlt das Feld, wird wie immer markiert.
+			Annotate *bool `json:"annotate"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 32<<20)).Decode(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -221,7 +224,13 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		doc := annotate.Apply(string(old), body.Text, s.User, time.Now())
+		marked := body.Annotate == nil || *body.Annotate
+		var doc annotate.Doc
+		if marked {
+			doc = annotate.Apply(string(old), body.Text, s.User, time.Now())
+		} else {
+			doc = annotate.ApplyPlain(string(old), body.Text)
+		}
 		if err := writeAtomic(abs, doc.Raw()); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -230,7 +239,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 			s.selfWrite[rel] = info.ModTime().UnixMilli()*997 + info.Size()
 		}
 		if s.OnSave != nil {
-			s.OnSave(rel, len(doc.Regions))
+			s.OnSave(rel, len(doc.Regions), marked)
 		}
 		writeJSON(w, s.respond(rel, abs, doc))
 

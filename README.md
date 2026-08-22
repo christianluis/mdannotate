@@ -79,6 +79,7 @@ mda . -user "cl"        # anderer Name in den Marken
 
   15:38:21  gesichert        konzept.md  · 2 Marken
   15:38:22  extern geändert  notizen/termin.md
+  15:38:40  gesichert        konzept.md  · 2 Marken · ohne neue Marke
 ```
 
 Der Browser öffnet sich von selbst. Links stehen alle `.md`-Dateien unterhalb
@@ -88,6 +89,12 @@ Die Zahl hinter einem Dateinamen sagt, wie viele Passagen darin markiert sind.
 Gesichert wird von allein, kurz nachdem du aufhörst zu tippen, oder sofort mit
 `⌘S`. Ändert eine KI die Datei währenddessen von außen, lädt `mda` sie nach;
 hast du selbst ungesicherte Änderungen, fragt es vorher nach.
+
+Oben rechts steht ein Schalter, **Marken an** oder **Marken aus**. Bei „aus“
+geht dein Text ohne Start- und Endmarke in die Datei — für Tippfehler und
+Kleinkram, den niemand nachvollziehen muss. Marken, die schon in der Datei
+stehen, bleiben dabei unangetastet und wandern mit ihren Zeilen mit. Die
+Einstellung gilt für den nächsten Speichervorgang und merkt sich der Browser.
 
 `mda` lauscht nur auf `127.0.0.1` und verlangt für jeden Zugriff ein Token,
 das beim Start erzeugt und in der geöffneten Adresse mitgegeben wird.
@@ -134,6 +141,8 @@ steht, und fasst jede geänderte Passage ein. Dabei gilt:
 * Löschst du etwas, bleibt ein Markenpaar ohne Inhalt an der Fundstelle
   zurück. Reine Leerzeilen erzeugen keine Marke.
 * Marken innerhalb eines Codeblocks sind Beispieltext und bleiben es.
+* Steht der Schalter auf „Marken aus“, entfällt nur das Einfassen der neuen
+  Änderung; alles andere gilt unverändert.
 
 Das Wort `Annottation` ist genau so geschrieben wie in der Aufgabenstellung.
 Es steht als Konstante in `internal/annotate/annotate.go`.

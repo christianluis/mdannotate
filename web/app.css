@@ -264,6 +264,36 @@ body {
 
 .marks { color: var(--mark); font-family: var(--mono); text-transform: none; letter-spacing: 0; }
 
+/* Der Schalter sagt, ob die naechste Speicherung Marken setzt. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0.12rem var(--sp-3) 0.16rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.switch-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.switch[aria-pressed="true"] {
+  color: var(--mark-ink);
+  border-color: var(--mark-rule);
+  background: var(--mark-soft);
+}
+.switch[aria-pressed="true"] .switch-dot { background: var(--mark); }
+.switch:hover { border-color: var(--ink-3); }
+
 .status { font-variant-numeric: tabular-nums; }
 .status[data-state="dirty"] { color: var(--warn); }
 .status[data-state="saved"] { color: var(--mark); }

@@ -164,6 +164,16 @@ func IsMarker(line string) bool {
 // Apply nimmt den alten Dateiinhalt und den neuen sauberen Text, umschliesst
 // jede geaenderte Passage mit Marken und liefert den neuen Dateiinhalt.
 func Apply(oldRaw, newClean, user string, now time.Time) Doc {
+	return rewrite(oldRaw, newClean, user, now, true)
+}
+
+// ApplyPlain schreibt den neuen Text, ohne die Aenderung zu markieren.
+// Bereits vorhandene Marken bleiben erhalten und wandern mit ihren Zeilen mit.
+func ApplyPlain(oldRaw, newClean string) Doc {
+	return rewrite(oldRaw, newClean, "", time.Time{}, false)
+}
+
+func rewrite(oldRaw, newClean, user string, now time.Time, mark bool) Doc {
 	old := Parse(oldRaw)
 	next := Doc{CRLF: old.CRLF, FinalNL: true}
 
@@ -174,7 +184,6 @@ func Apply(oldRaw, newClean, user string, now time.Time) Doc {
 	}
 
 	ops := diffLines(old.Lines, next.Lines)
-	ts := now.Format(TimeLayot)
 
 	// Bestehende Regionen auf die neuen Zeilennummern umrechnen.
 	for _, r := range old.Regions {
@@ -188,8 +197,11 @@ func Apply(oldRaw, newClean, user string, now time.Time) Doc {
 	}
 
 	// Neue Regionen fuer jede geaenderte Passage.
-	for _, h := range hunks(ops, old.Lines, next.Lines) {
-		next.Regions = append(next.Regions, Region{h.start, h.end, user, ts})
+	if mark {
+		ts := now.Format(TimeLayot)
+		for _, h := range hunks(ops, old.Lines, next.Lines) {
+			next.Regions = append(next.Regions, Region{h.start, h.end, user, ts})
+		}
 	}
 
 	next.Regions = normalize(next.Regions)

@@ -18,6 +18,8 @@ const filterEl = $('filter');
 const bannerEl = $('banner');
 const bannerText = $('bannerText');
 const bannerAction = $('bannerAction');
+const annBtn = $('annBtn');
+const annLabel = $('annLabel');
 
 let cfg = {};
 let current = null;
@@ -27,6 +29,7 @@ let saving = false;
 let pending = false;
 let conflicted = false;
 let saveTimer = 0;
+let marking = true;
 let files = [];
 const collapsed = new Set();
 
@@ -262,7 +265,7 @@ async function save(force = false) {
     const r = await api(`/api/file?path=${encodeURIComponent(current)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, mod: force ? 0 : mod }),
+      body: JSON.stringify({ text, mod: force ? 0 : mod, annotate: marking }),
     });
     const data = await r.json();
 
@@ -346,6 +349,24 @@ function listen() {
   });
 }
 
+// ---------------------------------------------------------- Marken an/aus
+
+// Bei "aus" wandert der Text ohne Start- und Endmarke in die Datei; die
+// Marken, die schon darin stehen, bleiben unangetastet.
+function applyMarking(on) {
+  marking = on;
+  annBtn.setAttribute('aria-pressed', String(on));
+  annLabel.textContent = on ? 'Marken an' : 'Marken aus';
+  annBtn.title = on
+    ? 'Jede Änderung wird mit Start- und Endmarke eingefasst. Klicken schaltet das ab.'
+    : 'Änderungen gehen ohne Marken in die Datei. Klicken schaltet die Marken wieder an.';
+  localStorage.setItem('mda.marking', on ? 'on' : 'off');
+}
+
+// Umgeschaltet wird fuer den naechsten Speichervorgang: was noch ungesichert
+// im Editor steht, geht also schon nach der neuen Einstellung in die Datei.
+annBtn.addEventListener('click', () => applyMarking(!marking));
+
 // ------------------------------------------------------------ Darstellung
 
 // Hell ist der Standard; dunkel nur, wenn jemand danach fragt.
@@ -392,6 +413,7 @@ window.addEventListener('beforeunload', (e) => {
 
 async function start() {
   applyTheme(localStorage.getItem('mda.theme') === 'dark' ? 'dark' : 'light');
+  applyMarking(localStorage.getItem('mda.marking') !== 'off');
 
   cfg = await (await api('/api/config')).json();
   $('rootName').textContent = cfg.name;

@@ -176,3 +176,24 @@ func TestPureBlankInsertGetsNoMarker(t *testing.T) {
 		t.Fatalf("eingefuegte Leerzeilen brauchen keine Marke:\n%s", got)
 	}
 }
+
+func TestApplyPlainSetztKeineMarke(t *testing.T) {
+	got := ApplyPlain("# Titel\n\nEin Absatz.\n", "# Titel\n\nEin geaenderter Absatz.\n").Raw()
+	want := "# Titel\n\nEin geaenderter Absatz.\n"
+	if got != want {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+func TestApplyPlainLaesstBestehendeMarkeStehen(t *testing.T) {
+	raw := apply(t, "a\nb\nc\n", "a\nB\nc\n", t0)
+	got := ApplyPlain(raw, "vorher\na\nB\nc\n").Raw()
+	want := "vorher\na\n" +
+		StartLine("chris", t0.Format(TimeLayot)) + "\n" +
+		"B\n" +
+		EndLine("chris", t0.Format(TimeLayot)) + "\n" +
+		"c\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

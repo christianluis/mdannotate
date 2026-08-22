@@ -58,7 +58,13 @@ func main() {
 	}
 	url := srv.URL(ln.Addr())
 
-	srv.OnSave = func(path string, n int) { event("gesichert", path, marks(n)) }
+	srv.OnSave = func(path string, n int, marked bool) {
+		note := marks(n)
+		if !marked {
+			note += " · ohne neue Marke"
+		}
+		event("gesichert", path, note)
+	}
 	srv.OnExternal = func(path string) { event("extern geändert", path, "") }
 
 	go srv.Watch(700 * time.Millisecond)
