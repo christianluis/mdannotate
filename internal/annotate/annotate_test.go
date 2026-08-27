@@ -3,38 +3,34 @@ package annotate
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
-var t0 = time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
-var t1 = time.Date(2026, 8, 22, 13, 0, 0, 0, time.UTC)
-
-func apply(t *testing.T, raw, clean string, at time.Time) string {
+func apply(t *testing.T, raw, clean string) string {
 	t.Helper()
-	return Apply(raw, clean, "chris", at).Raw()
+	return Apply(raw, clean, "chris").Raw()
 }
 
 func TestRoundTripWithoutChanges(t *testing.T) {
 	raw := "# Titel\n\nEin Absatz.\n"
-	if got := apply(t, raw, "# Titel\n\nEin Absatz.\n", t0); got != raw {
+	if got := apply(t, raw, "# Titel\n\nEin Absatz.\n"); got != raw {
 		t.Fatalf("unveraenderter Text darf nicht angefasst werden:\n%q", got)
 	}
 }
 
 func TestWrapChangedLine(t *testing.T) {
 	raw := "# Titel\n\nEin Absatz.\n"
-	got := apply(t, raw, "# Titel\n\nEin geaenderter Absatz.\n", t0)
+	got := apply(t, raw, "# Titel\n\nEin geaenderter Absatz.\n")
 	want := "# Titel\n\n" +
-		StartLine("chris", t0.Format(TimeLayot)) + "\n" +
+		StartLine("chris") + "\n" +
 		"Ein geaenderter Absatz.\n" +
-		EndLine("chris", t0.Format(TimeLayot)) + "\n"
+		EndLine("chris") + "\n"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 func TestParseStripsMarkers(t *testing.T) {
-	raw := "a\n" + StartLine("chris", "T") + "\nb\n" + EndLine("chris", "T") + "\nc\n"
+	raw := "a\n" + StartLine("chris") + "\nb\n" + EndLine("chris") + "\nc\n"
 	d := Parse(raw)
 	if d.Text() != "a\nb\nc\n" {
 		t.Fatalf("clean text falsch: %q", d.Text())
@@ -48,75 +44,115 @@ func TestParseStripsMarkers(t *testing.T) {
 }
 
 func TestEditInsideExistingRegionDoesNotNest(t *testing.T) {
-	raw := apply(t, "a\nb\nc\n", "a\nB\nc\n", t0)
-	got := apply(t, raw, "a\nB!\nc\n", t1)
+	raw := apply(t, "a\nb\nc\n", "a\nB\nc\n")
+	got := apply(t, raw, "a\nB!\nc\n")
 	if strings.Count(got, StartWord+" "+Keyword) != 1 {
 		t.Fatalf("es darf nur eine Startmarke geben:\n%s", got)
-	}
-	if !strings.Contains(got, t1.Format(TimeLayot)) {
-		t.Fatalf("Zeitstempel muss aktualisiert werden:\n%s", got)
 	}
 }
 
 func TestAdjacentRegionsMerge(t *testing.T) {
-	raw := apply(t, "a\nb\nc\n", "A\nb\nc\n", t0)
-	got := apply(t, raw, Parse(raw).Text()[:0]+"A\nB\nc\n", t1)
+	raw := apply(t, "a\nb\nc\n", "A\nb\nc\n")
+	got := apply(t, raw, Parse(raw).Text()[:0]+"A\nB\nc\n")
 	if strings.Count(got, StartWord+" "+Keyword) != 1 {
 		t.Fatalf("angrenzende Regionen muessen verschmelzen:\n%s", got)
 	}
 }
 
-func TestDeletionLeavesMarker(t *testing.T) {
-	got := apply(t, "a\nweg\nc\n", "a\nc\n", t0)
-	if !strings.Contains(got, StartLine("chris", t0.Format(TimeLayot))+"\n"+EndLine("chris", t0.Format(TimeLayot))) {
-		t.Fatalf("Loeschung braucht eine Nullbreite-Marke:\n%s", got)
+func TestDeletionLeavesNoMarker(t *testing.T) {
+	got := apply(t, "a\nweg\nc\n", "a\nc\n")
+	if strings.Contains(got, Keyword) {
+		t.Fatalf("eine Loeschung hinterlaesst keine leere Marke:\n%s", got)
+	}
+	if got != "a\nc\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestGeleerteRegionFaelltWeg(t *testing.T) {
+	raw := apply(t, "a\nb\nc\n", "a\nB\nc\n")
+	got := apply(t, raw, "a\nc\n")
+	if strings.Contains(got, Keyword) {
+		t.Fatalf("von der geleerten Region darf nichts stehen bleiben:\n%s", got)
+	}
+}
+
+func TestErsetzenMarkiertDasNeue(t *testing.T) {
+	got := apply(t, "a\nalt\nc\n", "a\nneu\nc\n")
+	want := "a\n" + StartLine("chris") + "\nneu\n" + EndLine("chris") + "\nc\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestLeeresMarkenpaarWirdBeimSchreibenAufgeloest(t *testing.T) {
+	raw := "a\n" + StartLine("chris") + "\n" + EndLine("chris") + "\nb\n"
+	d := Parse(raw)
+	if len(d.Regions) != 0 {
+		t.Fatalf("ein Markenpaar ohne Inhalt ist keine Region: %+v", d.Regions)
+	}
+	if d.Raw() != "a\nb\n" {
+		t.Fatalf("leere Marken muessen verschwinden: %q", d.Raw())
+	}
+}
+
+func TestAltschreibweiseUndZeitstempelWerdenGelesen(t *testing.T) {
+	raw := "a\n----Start Annottation [chris] [2026-08-22T12:00:00+02:00]\nb\n" +
+		"----End Annottation [chris] [2026-08-22T12:00:00+02:00]\nc\n"
+	d := Parse(raw)
+	if len(d.Regions) != 1 || d.Regions[0].User != "chris" {
+		t.Fatalf("alte Marke nicht erkannt: %+v", d.Regions)
+	}
+	want := "a\n" + StartLine("chris") + "\nb\n" + EndLine("chris") + "\nc\n"
+	if d.Raw() != want {
+		t.Fatalf("beim Schreiben gilt die neue Form:\n%s", d.Raw())
 	}
 }
 
 func TestBlankLineDeletionIsIgnored(t *testing.T) {
-	got := apply(t, "a\n\nb\n", "a\nb\n", t0)
+	got := apply(t, "a\n\nb\n", "a\nb\n")
 	if strings.Contains(got, Keyword) {
 		t.Fatalf("reine Leerzeilen sollen keine Marke erzeugen:\n%s", got)
 	}
 }
 
 func TestInsertAfterRegionMerges(t *testing.T) {
-	raw := apply(t, "a\n", "A\n", t0)
-	got := apply(t, raw, "A\nneu\n", t1)
+	raw := apply(t, "a\n", "A\n")
+	got := apply(t, raw, "A\nneu\n")
 	if strings.Count(got, StartWord+" "+Keyword) != 1 {
 		t.Fatalf("neue Zeile direkt danach soll verschmelzen:\n%s", got)
 	}
 }
 
 func TestRegionSurvivesUnrelatedEdit(t *testing.T) {
-	raw := apply(t, "a\nb\nc\nd\n", "a\nB\nc\nd\n", t0)
-	got := apply(t, raw, "a\nB\nc\nD\n", t1)
+	raw := apply(t, "a\nb\nc\nd\n", "a\nB\nc\nd\n")
+	got := apply(t, raw, "a\nB\nc\nD\n")
 	d := Parse(got)
 	if len(d.Regions) != 2 {
 		t.Fatalf("erwarte zwei getrennte Regionen, habe %d:\n%s", len(d.Regions), got)
 	}
-	if d.Regions[0].Time != t0.Format(TimeLayot) {
-		t.Fatalf("alte Region darf ihren Zeitstempel behalten: %+v", d.Regions[0])
+	if d.Regions[0].Start != 1 || d.Regions[0].End != 2 {
+		t.Fatalf("die alte Region muss an ihrer Stelle bleiben: %+v", d.Regions[0])
 	}
 }
 
 func TestEmptyFile(t *testing.T) {
-	got := apply(t, "", "Hallo\n", t0)
-	want := StartLine("chris", t0.Format(TimeLayot)) + "\nHallo\n" + EndLine("chris", t0.Format(TimeLayot)) + "\n"
+	got := apply(t, "", "Hallo\n")
+	want := StartLine("chris") + "\nHallo\n" + EndLine("chris") + "\n"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
 
 func TestCRLFPreserved(t *testing.T) {
-	got := apply(t, "a\r\nb\r\n", "a\nB\n", t0)
+	got := apply(t, "a\r\nb\r\n", "a\nB\n")
 	if !strings.Contains(got, "\r\n") || strings.Contains(strings.ReplaceAll(got, "\r\n", ""), "\n") {
 		t.Fatalf("CRLF muss erhalten bleiben: %q", got)
 	}
 }
 
 func TestMultiLineInsert(t *testing.T) {
-	got := apply(t, "a\nz\n", "a\neins\nzwei\ndrei\nz\n", t0)
+	got := apply(t, "a\nz\n", "a\neins\nzwei\ndrei\nz\n")
 	d := Parse(got)
 	if len(d.Regions) != 1 || d.Regions[0].Start != 1 || d.Regions[0].End != 4 {
 		t.Fatalf("regions falsch: %+v\n%s", d.Regions, got)
@@ -124,7 +160,7 @@ func TestMultiLineInsert(t *testing.T) {
 }
 
 func TestMarkersInsideCodeFenceAreText(t *testing.T) {
-	raw := "Beispiel:\n\n```\n" + StartLine("chris", "T") + "\ntext\n" + EndLine("chris", "T") + "\n```\n\nEnde.\n"
+	raw := "Beispiel:\n\n```\n" + StartLine("chris") + "\ntext\n" + EndLine("chris") + "\n```\n\nEnde.\n"
 	d := Parse(raw)
 	if len(d.Regions) != 0 {
 		t.Fatalf("im Codeblock darf keine Marke erkannt werden: %+v", d.Regions)
@@ -139,7 +175,7 @@ func TestMarkersInsideCodeFenceAreText(t *testing.T) {
 
 func TestUnclosedFenceDoesNotSwallowMarkers(t *testing.T) {
 	// Ein Zaun, der wieder geschlossen wird, darf die Marke danach nicht verdecken.
-	raw := "```\ncode\n```\n" + StartLine("chris", "T") + "\nneu\n" + EndLine("chris", "T") + "\n"
+	raw := "```\ncode\n```\n" + StartLine("chris") + "\nneu\n" + EndLine("chris") + "\n"
 	d := Parse(raw)
 	if len(d.Regions) != 1 {
 		t.Fatalf("Marke nach dem Codeblock fehlt: %+v", d.Regions)
@@ -151,19 +187,19 @@ func TestUnclosedFenceDoesNotSwallowMarkers(t *testing.T) {
 
 func TestMarkersHugTheText(t *testing.T) {
 	// Ein neuer Absatz am Ende: die Marke darf die Trennleerzeile nicht einschliessen.
-	got := apply(t, "# Titel\n\nText.\n", "# Titel\n\nText.\n\nNeuer Absatz.\n", t0)
+	got := apply(t, "# Titel\n\nText.\n", "# Titel\n\nText.\n\nNeuer Absatz.\n")
 	want := "# Titel\n\nText.\n\n" +
-		StartLine("chris", t0.Format(TimeLayot)) + "\nNeuer Absatz.\n" +
-		EndLine("chris", t0.Format(TimeLayot)) + "\n"
+		StartLine("chris") + "\nNeuer Absatz.\n" +
+		EndLine("chris") + "\n"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 func TestMarkersHugTextInTheMiddle(t *testing.T) {
-	got := apply(t, "A\n\nC\n", "A\n\nB\n\nC\n", t0)
+	got := apply(t, "A\n\nC\n", "A\n\nB\n\nC\n")
 	want := "A\n\n" +
-		StartLine("chris", t0.Format(TimeLayot)) + "\nB\n" + EndLine("chris", t0.Format(TimeLayot)) +
+		StartLine("chris") + "\nB\n" + EndLine("chris") +
 		"\n\nC\n"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
@@ -171,7 +207,7 @@ func TestMarkersHugTextInTheMiddle(t *testing.T) {
 }
 
 func TestPureBlankInsertGetsNoMarker(t *testing.T) {
-	got := apply(t, "A\n\nB\n", "A\n\n\n\nB\n", t0)
+	got := apply(t, "A\n\nB\n", "A\n\n\n\nB\n")
 	if strings.Contains(got, Keyword) {
 		t.Fatalf("eingefuegte Leerzeilen brauchen keine Marke:\n%s", got)
 	}
@@ -186,12 +222,12 @@ func TestApplyPlainSetztKeineMarke(t *testing.T) {
 }
 
 func TestApplyPlainLaesstBestehendeMarkeStehen(t *testing.T) {
-	raw := apply(t, "a\nb\nc\n", "a\nB\nc\n", t0)
+	raw := apply(t, "a\nb\nc\n", "a\nB\nc\n")
 	got := ApplyPlain(raw, "vorher\na\nB\nc\n").Raw()
 	want := "vorher\na\n" +
-		StartLine("chris", t0.Format(TimeLayot)) + "\n" +
+		StartLine("chris") + "\n" +
 		"B\n" +
-		EndLine("chris", t0.Format(TimeLayot)) + "\n" +
+		EndLine("chris") + "\n" +
 		"c\n"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
@@ -222,8 +258,8 @@ func TestCompareStelltBeideFassungenNebeneinander(t *testing.T) {
 
 func TestCompareUebergehtDieMarken(t *testing.T) {
 	alt := "Ein Satz.\n"
-	neu := StartLine("wer", "2026-08-22T12:00:00+02:00") + "\nEin Satz.\n" +
-		EndLine("wer", "2026-08-22T12:00:00+02:00") + "\n"
+	neu := StartLine("wer") + "\nEin Satz.\n" +
+		EndLine("wer") + "\n"
 
 	c := Compare(alt, neu)
 	if len(c.Removed) != 0 || len(c.Added) != 0 {

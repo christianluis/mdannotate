@@ -1,9 +1,9 @@
 // Package annotate liest und schreibt Markdown-Dateien, in denen geaenderte
 // Passagen mit Annotationsmarken umschlossen sind:
 //
-//	----Start Annottation [user] [2026-08-22T12:34:56+02:00]
+//	----Start Annotation [user]
 //	... geaenderter Text ...
-//	----End Annottation [user] [2026-08-22T12:34:56+02:00]
+//	----End Annotation [user]
 //
 // Der Editor arbeitet nie auf diesen Marken. Er bekommt den "sauberen" Text
 // ohne Marken plus eine Liste von Regionen (Zeilenbereiche) und schickt beim
@@ -16,31 +16,40 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 )
 
-// Keyword ist bewusst so geschrieben wie in der Spezifikation vorgegeben.
 const (
-	Keyword   = "Annottation"
+	Keyword   = "Annotation"
 	StartWord = "Start"
 	EndWord   = "End"
 	Dashes    = "----"
-	TimeLayot = time.RFC3339
+)
+
+// Aeltere Dateien tragen das Wort doppelt geschrieben und hinter dem Namen
+// noch einen Zeitstempel. Beides wird beim Lesen hingenommen und beim
+// Schreiben stillschweigend abgelegt.
+const (
+	word  = `Annott?ation`
+	stamp = `(?: *\[[^\]]*\])?`
 )
 
 var (
-	startRe = regexp.MustCompile(`^` + Dashes + ` *` + StartWord + ` +` + Keyword + ` *\[(.*?)\] *\[(.*?)\] *$`)
-	endRe   = regexp.MustCompile(`^` + Dashes + ` *` + EndWord + ` +` + Keyword + ` *\[(.*?)\] *\[(.*?)\] *$`)
+	startRe = regexp.MustCompile(`^` + Dashes + ` *` + StartWord + ` +` + word + ` *\[(.*?)\]` + stamp + ` *$`)
+	endRe   = regexp.MustCompile(`^` + Dashes + ` *` + EndWord + ` +` + word + ` *\[(.*?)\]` + stamp + ` *$`)
 	fenceRe = regexp.MustCompile("^[ \t]{0,3}(`{3,}|~{3,})")
 )
 
 // Region ist ein halboffener Zeilenbereich [Start, End) im sauberen Text.
-// Start == End markiert eine Stelle, an der etwas geloescht wurde.
+// Leere Regionen gibt es nicht: eine Marke ohne Inhalt sagt nichts aus.
 type Region struct {
 	Start int    `json:"start"`
 	End   int    `json:"end"`
 	User  string `json:"user"`
-	Time  string `json:"time"`
+
+	// fresh unterscheidet die eben entstandene Region von den schon in der
+	// Datei stehenden. Verschmelzen zwei, gehoert die Marke dem, der zuletzt
+	// Hand angelegt hat.
+	fresh bool
 }
 
 func (r Region) empty() bool { return r.Start >= r.End }
@@ -73,7 +82,6 @@ func Parse(raw string) Doc {
 	type open struct {
 		start int
 		user  string
-		ts    string
 	}
 	var stack []open
 
@@ -94,20 +102,20 @@ func Parse(raw string) Doc {
 			continue
 		}
 		if m := startRe.FindStringSubmatch(line); m != nil {
-			stack = append(stack, open{len(d.Lines), m[1], m[2]})
+			stack = append(stack, open{len(d.Lines), m[1]})
 			continue
 		}
 		if endRe.MatchString(line) && len(stack) > 0 {
 			o := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
-			d.Regions = append(d.Regions, Region{o.start, len(d.Lines), o.user, o.ts})
+			d.Regions = append(d.Regions, Region{Start: o.start, End: len(d.Lines), User: o.user})
 			continue
 		}
 		d.Lines = append(d.Lines, line)
 	}
 	// Nicht geschlossene Marken laufen bis zum Dateiende.
 	for _, o := range stack {
-		d.Regions = append(d.Regions, Region{o.start, len(d.Lines), o.user, o.ts})
+		d.Regions = append(d.Regions, Region{Start: o.start, End: len(d.Lines), User: o.user})
 	}
 	d.Regions = normalize(d.Regions)
 	return d
@@ -122,23 +130,16 @@ func (d Doc) Raw() string {
 	byStart := map[int][]Region{}
 	byEnd := map[int][]Region{}
 	for _, r := range regions {
-		if r.empty() {
-			byStart[r.Start] = append(byStart[r.Start], r)
-			continue
-		}
 		byStart[r.Start] = append(byStart[r.Start], r)
 		byEnd[r.End] = append(byEnd[r.End], r)
 	}
 
 	for i := 0; i <= n; i++ {
 		for _, r := range byEnd[i] {
-			out = append(out, EndLine(r.User, r.Time))
+			out = append(out, EndLine(r.User))
 		}
 		for _, r := range byStart[i] {
-			out = append(out, StartLine(r.User, r.Time))
-			if r.empty() {
-				out = append(out, EndLine(r.User, r.Time))
-			}
+			out = append(out, StartLine(r.User))
 		}
 		if i < n {
 			out = append(out, d.Lines[i])
@@ -148,12 +149,12 @@ func (d Doc) Raw() string {
 }
 
 // StartLine und EndLine bauen die Markenzeilen.
-func StartLine(user, ts string) string {
-	return fmt.Sprintf("%s%s %s [%s] [%s]", Dashes, StartWord, Keyword, user, ts)
+func StartLine(user string) string {
+	return fmt.Sprintf("%s%s %s [%s]", Dashes, StartWord, Keyword, user)
 }
 
-func EndLine(user, ts string) string {
-	return fmt.Sprintf("%s%s %s [%s] [%s]", Dashes, EndWord, Keyword, user, ts)
+func EndLine(user string) string {
+	return fmt.Sprintf("%s%s %s [%s]", Dashes, EndWord, Keyword, user)
 }
 
 // IsMarker sagt, ob eine Zeile eine Annotationsmarke ist.
@@ -163,17 +164,17 @@ func IsMarker(line string) bool {
 
 // Apply nimmt den alten Dateiinhalt und den neuen sauberen Text, umschliesst
 // jede geaenderte Passage mit Marken und liefert den neuen Dateiinhalt.
-func Apply(oldRaw, newClean, user string, now time.Time) Doc {
-	return rewrite(oldRaw, newClean, user, now, true)
+func Apply(oldRaw, newClean, user string) Doc {
+	return rewrite(oldRaw, newClean, user, true)
 }
 
 // ApplyPlain schreibt den neuen Text, ohne die Aenderung zu markieren.
 // Bereits vorhandene Marken bleiben erhalten und wandern mit ihren Zeilen mit.
 func ApplyPlain(oldRaw, newClean string) Doc {
-	return rewrite(oldRaw, newClean, "", time.Time{}, false)
+	return rewrite(oldRaw, newClean, "", false)
 }
 
-func rewrite(oldRaw, newClean, user string, now time.Time, mark bool) Doc {
+func rewrite(oldRaw, newClean, user string, mark bool) Doc {
 	old := Parse(oldRaw)
 	next := Doc{CRLF: old.CRLF, FinalNL: true}
 
@@ -188,19 +189,17 @@ func rewrite(oldRaw, newClean, user string, now time.Time, mark bool) Doc {
 	// Bestehende Regionen auf die neuen Zeilennummern umrechnen.
 	for _, r := range old.Regions {
 		s, e := mapRange(ops, r.Start, r.End, len(next.Lines))
-		if r.empty() || s < e {
-			next.Regions = append(next.Regions, Region{s, e, r.User, r.Time})
+		if s < e {
+			next.Regions = append(next.Regions, Region{Start: s, End: e, User: r.User})
 		}
-		// War die Region vorher nicht leer und ist jetzt leer, wurde ihr
-		// Inhalt geloescht. Die Loeschung selbst erzeugt gleich eine
-		// eigene Marke, also faellt die alte weg.
+		// Ist von der Region nichts uebrig, wurde ihr Inhalt geloescht. Eine
+		// Marke ohne Inhalt sagt nichts, also faellt sie weg.
 	}
 
 	// Neue Regionen fuer jede geaenderte Passage.
 	if mark {
-		ts := now.Format(TimeLayot)
-		for _, h := range hunks(ops, old.Lines, next.Lines) {
-			next.Regions = append(next.Regions, Region{h.start, h.end, user, ts})
+		for _, h := range hunks(ops, next.Lines) {
+			next.Regions = append(next.Regions, Region{Start: h.start, End: h.end, User: user, fresh: true})
 		}
 	}
 
@@ -211,7 +210,7 @@ func rewrite(oldRaw, newClean, user string, now time.Time, mark bool) Doc {
 // hunk ist ein zusammenhaengender geaenderter Bereich in neuen Koordinaten.
 type hunk struct{ start, end int }
 
-func hunks(ops []op, oldLines, newLines []string) []hunk {
+func hunks(ops []op, newLines []string) []hunk {
 	var out []hunk
 	i := 0
 	for i < len(ops) {
@@ -221,21 +220,18 @@ func hunks(ops []op, oldLines, newLines []string) []hunk {
 		}
 		j := i
 		insStart, insEnd := -1, -1
-		delText := false
-		at := ops[i].b
 		for j < len(ops) && ops[j].kind != opEqual {
 			if ops[j].kind == opIns {
 				if insStart < 0 {
 					insStart = ops[j].b
 				}
 				insEnd = ops[j].b + 1
-			} else if strings.TrimSpace(oldLines[ops[j].a]) != "" {
-				delText = true
 			}
 			j++
 		}
-		switch {
-		case insStart >= 0:
+		// Nur Geloeschtes hinterlaesst keine Marke: ein Markenpaar ohne
+		// Inhalt zwischen sich waere im Text nur eine leere Stelle.
+		if insStart >= 0 {
 			// Leerzeilen an den Raendern gehoeren nicht in die Marke, sonst
 			// steht der Text nicht zwischen den Marken, sondern daneben.
 			for insStart < insEnd && strings.TrimSpace(newLines[insStart]) == "" {
@@ -246,12 +242,7 @@ func hunks(ops []op, oldLines, newLines []string) []hunk {
 			}
 			if insStart < insEnd {
 				out = append(out, hunk{insStart, insEnd})
-			} else if delText {
-				out = append(out, hunk{at, at})
 			}
-		case delText:
-			// Reine Loeschung: Nullbreite-Marke an der Fundstelle.
-			out = append(out, hunk{at, at})
 		}
 		i = j
 	}
@@ -287,15 +278,20 @@ func mapRange(ops []op, s, e, newLen int) (int, int) {
 	return ns, ne
 }
 
-// normalize sortiert die Regionen und verschmilzt ueberlappende oder direkt
-// aneinandergrenzende zu einer. Ergebnis: disjunkt, sortiert, nie verschachtelt.
-// Beim Verschmelzen gewinnt der juengste Zeitstempel.
+// normalize sortiert die Regionen, wirft leere weg und verschmilzt
+// ueberlappende oder direkt aneinandergrenzende zu einer. Ergebnis: disjunkt,
+// sortiert, nie verschachtelt. Beim Verschmelzen gewinnt, wer zuletzt
+// geaendert hat.
 func normalize(in []Region) []Region {
-	if len(in) == 0 {
+	rs := make([]Region, 0, len(in))
+	for _, r := range in {
+		if !r.empty() {
+			rs = append(rs, r)
+		}
+	}
+	if len(rs) == 0 {
 		return nil
 	}
-	rs := make([]Region, len(in))
-	copy(rs, in)
 	sort.SliceStable(rs, func(i, j int) bool {
 		if rs[i].Start != rs[j].Start {
 			return rs[i].Start < rs[j].Start
@@ -310,23 +306,14 @@ func normalize(in []Region) []Region {
 			if r.End > last.End {
 				last.End = r.End
 			}
-			if newer(r.Time, last.Time) {
-				last.User, last.Time = r.User, r.Time
+			if r.fresh {
+				last.User, last.fresh = r.User, true
 			}
 			continue
 		}
 		out = append(out, r)
 	}
 	return out
-}
-
-func newer(a, b string) bool {
-	ta, ea := time.Parse(TimeLayot, a)
-	tb, eb := time.Parse(TimeLayot, b)
-	if ea == nil && eb == nil {
-		return ta.After(tb)
-	}
-	return a > b
 }
 
 func join(lines []string, crlf, finalNL bool) string {

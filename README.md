@@ -4,18 +4,18 @@
 Browser. Alles, was du darin änderst, landet in der Datei zwischen zwei Marken:
 
 ```
-----Start Annottation [christianluis] [2026-08-22T13:24:37+02:00]
+----Start Annotation [christianluis]
 Ein Absatz zur Einordnung. Er enthält **fett**, *kursiv* und `code`. Ergänzung.
-----End Annottation [christianluis] [2026-08-22T13:24:37+02:00]
+----End Annotation [christianluis]
 ```
 
 Damit sieht eine KI, mit der du dich über das Dokument abstimmst, auf den
-ersten Blick, welche Passagen von dir stammen und wann du sie angefasst hast —
-ohne dass du erklären musst, was du geändert hast.
+ersten Blick, welche Passagen von dir stammen — ohne dass du erklären musst,
+was du geändert hast.
 
 Im Editor selbst tauchen die Markenzeilen nicht auf. Dort steht stattdessen
-ein Balken im Seitenrand, daneben Kürzel und Zeitpunkt, so wie eine
-Änderungsmarke in einer Korrekturfahne.
+ein Balken im Seitenrand, daneben das Kürzel, so wie eine Änderungsmarke in
+einer Korrekturfahne.
 
 ## Installation
 
@@ -194,16 +194,19 @@ steht, und fasst jede geänderte Passage ein. Dabei gilt:
   hereinkamen — keine Umformatierung, keine verschobenen Umbrüche.
 * Die Marken sitzen direkt am Text; Leerzeilen bleiben außerhalb.
 * Bearbeitest du eine bereits markierte Passage erneut, entsteht keine
-  Verschachtelung; die vorhandene Marke bekommt den neuen Zeitstempel.
+  Verschachtelung; die vorhandene Marke wird auf deinen Namen umgeschrieben.
 * Direkt aneinandergrenzende Marken verschmelzen zu einer.
-* Löschst du etwas, bleibt ein Markenpaar ohne Inhalt an der Fundstelle
-  zurück. Reine Leerzeilen erzeugen keine Marke.
+* Marken ohne Inhalt entstehen nie. Löschst du etwas, bleibt an der Stelle
+  nichts zurück; ersetzt du etwas, steht das Neue zwischen den Marken. Auch
+  eine Marke, deren Inhalt du später löschst, verschwindet mit ihm.
 * Marken innerhalb eines Codeblocks sind Beispieltext und bleiben es.
 * Steht der Schalter auf „Marken aus“, entfällt nur das Einfassen der neuen
   Änderung; alles andere gilt unverändert.
 
-Das Wort `Annottation` ist genau so geschrieben wie in der Aufgabenstellung.
-Es steht als Konstante in `internal/annotate/annotate.go`.
+Das Wort `Annotation` steht als Konstante in `internal/annotate/annotate.go`.
+Ältere Dateien, in denen `Annottation` steht oder hinter dem Namen noch ein
+Zeitstempel, werden weiterhin gelesen; beim nächsten Sichern schreibt `mda`
+die Marke in der neuen Form.
 
 ## Gestaltung
 

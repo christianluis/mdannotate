@@ -299,20 +299,14 @@ export class Editor {
     const before = new Set([...this.root.children].filter((el) => el.classList.contains('ann')));
 
     for (const el of this.root.children) {
-      el.classList.remove('ann', 'ann-head', 'ann-cont', 'ann-gap', 'ann-new');
+      el.classList.remove('ann', 'ann-head', 'ann-cont', 'ann-new');
       delete el.dataset.tag;
       el.removeAttribute('title');
     }
 
     for (const r of regions || []) {
-      if (r.start >= r.end) {
-        const hit = ranges.find((x) => x.start >= r.start) || ranges[ranges.length - 1];
-        if (hit) {
-          hit.el.classList.add('ann-gap');
-          hit.el.title = 'Hier wurde etwas entfernt — ' + tagFor(r).replace('\n', ', ');
-        }
-        continue;
-      }
+      // Marken ohne Inhalt gibt es nicht; kaeme doch eine an, bleibt sie ohne Balken.
+      if (r.start >= r.end) continue;
       const inside = ranges.filter((x) => x.start < r.end && x.end > r.start);
       inside.forEach((x, k) => {
         x.el.classList.add('ann');
@@ -900,11 +894,7 @@ export class Editor {
   }
 }
 
-// tagFor beschriftet eine Randmarke: wer, wann.
+// tagFor beschriftet eine Randmarke: wer.
 function tagFor(r) {
-  const d = new Date(r.time);
-  if (isNaN(d)) return `${r.user}\n${r.time}`;
-  const p2 = (n) => String(n).padStart(2, '0');
-  const when = `${p2(d.getDate())}.${p2(d.getMonth() + 1)}. ${p2(d.getHours())}:${p2(d.getMinutes())}`;
-  return `${r.user}\n${when}`;
+  return r.user;
 }

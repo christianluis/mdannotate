@@ -249,7 +249,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		marked := body.Annotate == nil || *body.Annotate
 		var doc annotate.Doc
 		if marked {
-			doc = annotate.Apply(string(old), body.Text, s.User, time.Now())
+			doc = annotate.Apply(string(old), body.Text, s.User)
 		} else {
 			doc = annotate.ApplyPlain(string(old), body.Text)
 		}

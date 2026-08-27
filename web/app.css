@@ -694,13 +694,6 @@ body {
   pointer-events: none;
 }
 
-/* Eine Marke ohne Inhalt: hier stand etwas, das entfernt wurde. */
-.doc .ann-gap {
-  border-top: 1px dashed var(--mark-rule);
-  padding-top: var(--sp-3);
-}
-.doc .li.ann-gap::before { top: var(--sp-3); }
-
 /* ------------------------------------------------------- Vergleich */
 
 /* Im Vergleich stehen beide Fassungen im selben Text. Was wegfiel, ist
