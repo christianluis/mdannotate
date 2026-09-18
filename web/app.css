@@ -510,7 +510,8 @@ body {
   line-height: var(--lh-tight);
   font-weight: 600;
   letter-spacing: -0.011em;
-  text-wrap: balance;
+  /* Kein Zeilenausgleich: der wuerde beim Tippen in der zweiten Zeile den
+     Umbruch der ersten verschieben. */
 }
 .doc h1 { font-size: var(--fs-4); letter-spacing: -0.02em; }
 .doc h2 { font-size: var(--fs-3); letter-spacing: -0.016em; }

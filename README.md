@@ -175,6 +175,8 @@ Auszeichnungen entstehen beim Tippen, die Markdown-Zeichen verschwinden dabei:
 Die Blockauslöser greifen am Anfang eines Absatzes. Enter teilt den Block,
 Enter in einem leeren Listenpunkt oder Zitat geht eine Ebene heraus, Rücktaste
 am Blockanfang nimmt die Auszeichnung zurück. `Tab` rückt Listenpunkte ein.
+Ein leerer Absatz bleibt, was er ist: in der Datei steht er als zusätzliche
+Leerzeile, und so kommt er auch wieder herein.
 
 | Taste | |
 | --- | --- |
@@ -183,7 +185,7 @@ am Blockanfang nimmt die Auszeichnung zurück. `Tab` rückt Listenpunkte ein.
 | `⌘B` `⌘I` `⌘K` | fett, kursiv, Verweis |
 | `⌘P` | Dateien filtern |
 | `⌘⇧H` | Verlauf ein- und ausblenden |
-| `⇧Enter` | Zeilenumbruch, im Codeblock: Block verlassen |
+| `⇧Enter` | Zeilenumbruch; in Überschriften wie Enter, im Codeblock: Block verlassen |
 
 ## Wie die Marken gesetzt werden
 
@@ -192,6 +194,9 @@ steht, und fasst jede geänderte Passage ein. Dabei gilt:
 
 * Unberührte Bereiche werden Zeichen für Zeichen so zurückgeschrieben, wie sie
   hereinkamen — keine Umformatierung, keine verschobenen Umbrüche.
+* Auch in einem Absatz, den du bearbeitest, bleiben die Zeilenumbrüche der
+  Quelle stehen. Nur direkt an der Tippstelle zieht der Browser die Zeile mit
+  der nächsten zusammen.
 * Die Marken sitzen direkt am Text; Leerzeilen bleiben außerhalb.
 * Bearbeitest du eine bereits markierte Passage erneut, entsteht keine
   Verschachtelung; die vorhandene Marke wird auf deinen Namen umgeschrieben.

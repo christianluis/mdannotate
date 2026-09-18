@@ -103,7 +103,7 @@ export class Editor {
     this.root.replaceChildren();
     for (const b of blocks) this.root.appendChild(this.makeEl(b));
     if (!this.root.children.length) {
-      this.root.appendChild(this.makeEl({ type: 'p', text: '', lead: 0, trail: 0, dirty: false, src: [''] }));
+      this.root.appendChild(this.makeEl({ type: 'p', text: '', trail: 0, dirty: false, src: [''] }));
     }
     this.renumber();
 
@@ -114,7 +114,6 @@ export class Editor {
   makeEl(b) {
     b.id = uid++;
     if (b.trail === undefined) b.trail = 1;
-    if (b.lead === undefined) b.lead = 0;
     if (b.dirty === undefined) b.dirty = true;
     this.blocks.set(b.id, b);
     const el = this.buildEl(b);
@@ -222,28 +221,42 @@ export class Editor {
   serialize() {
     const lines = [];
     const ranges = [];
+    const kids = [...this.root.children];
 
-    for (const el of this.root.children) {
+    kids.forEach((el, k) => {
       const b = this.blockOf(el);
-      const lead = b ? b.lead || 0 : 0;
       const at = lines.length;
-
+      let body;
       if (b && !b.dirty) {
-        lines.push(...b.src);
+        body = b.src;
       } else {
         const nb = this.readEl(el);
-        nb.lead = lead;
         nb.step = this.step;
-        lines.push(...md.blockToLines(nb));
+        body = md.blockToLines(nb);
       }
-      ranges.push({ el, start: at + lead, end: lines.length });
+      lines.push(...body);
+      ranges.push({ el, start: at, end: lines.length });
 
-      const trail = b && b.trail !== undefined ? b.trail : 1;
+      const next = kids[k + 1];
+      if (!next) return;
+      // Ein leerer Absatz ist selbst die Leerzeile; er braucht keine zweite.
+      if (body.every((l) => l.trim() === '')) return;
+
+      let trail = b && b.trail !== undefined ? b.trail : 1;
+      // Ohne Leerzeile zieht der Parser einen Absatz in den Block davor.
+      // Dicht stehen duerfen nur Listenpunkte; wo sonst jemand Hand angelegt
+      // hat, kommt die Leerzeile dazu.
+      if (trail === 0) {
+        const nb = this.blockOf(next);
+        const tight = el.classList.contains('li') && next.classList.contains('li');
+        const touched = !b || b.dirty || !nb || nb.dirty;
+        if (touched && !tight) trail = 1;
+      }
       for (let i = 0; i < trail; i++) lines.push('');
-    }
+    });
 
-    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
-    return { text: lines.length ? lines.join('\n') + '\n' : '', ranges };
+    if (lines.every((l) => l.trim() === '')) return { text: '', ranges };
+    return { text: lines.join('\n') + '\n', ranges };
   }
 
   readEl(el) {
@@ -257,7 +270,9 @@ export class Editor {
       return { type: 'code', lang: el.dataset.lang || '', lines };
     }
     if (tag === 'TABLE') {
-      const rows = [...el.querySelectorAll('tr')].map((tr) => [...tr.children].map((c) => md.blockText(c)));
+      // In einer Zelle gibt es keine Zeilen; ein Umbruch wird zum Leerzeichen.
+      const cell = (c) => md.blockText(c).replace(/[ \t]*\n[ \t]*/g, ' ');
+      const rows = [...el.querySelectorAll('tr')].map((tr) => [...tr.children].map(cell));
       const first = el.querySelector('tr');
       const align = first ? [...first.children].map((c) => c.dataset.align || '') : [];
       return { type: 'table', rows: rows.length ? rows : [['']], align };
@@ -453,7 +468,9 @@ export class Editor {
 
     if (el.tagName === 'TABLE') return; // Zeilenumbruch in Zellen ueberlassen wir dem Browser
 
-    if (e.shiftKey) {
+    // Umschalt-Enter bricht die Zeile um. Eine Ueberschrift hat keine zweite
+    // Zeile; dort wirkt es wie Enter.
+    if (e.shiftKey && !/^H[1-6]$/.test(el.tagName)) {
       e.preventDefault();
       document.execCommand('insertLineBreak');
       return;
@@ -506,7 +523,7 @@ export class Editor {
     const oldTrail = b && b.trail !== undefined ? b.trail : 1;
     if (b) b.trail = spec.type === 'li' ? 0 : 1;
 
-    const nel = this.makeEl({ ...spec, trail: oldTrail, lead: 0 });
+    const nel = this.makeEl({ ...spec, trail: oldTrail });
     nel.replaceChildren();
     if (frag && (frag.textContent !== '' || frag.querySelector?.('img'))) nel.appendChild(frag);
     ensureFillable(nel);
@@ -627,6 +644,7 @@ export class Editor {
 
     const at = el.textContent.length;
     if (el.childNodes.length === 1 && el.firstChild.nodeName === 'BR') el.replaceChildren();
+    if (next.childNodes.length === 1 && next.firstChild.nodeName === 'BR') next.replaceChildren();
     while (next.firstChild) el.appendChild(next.firstChild);
     next.remove();
     ensureFillable(el);
@@ -796,7 +814,7 @@ export class Editor {
   morph(el, spec) {
     const b = this.blockOf(el);
     const pos = Math.max(0, caretOffset(el));
-    const nb = { ...spec, text: '', trail: b ? b.trail : 1, lead: b ? b.lead : 0 };
+    const nb = { ...spec, text: '', trail: b ? b.trail : 1 };
     const nel = this.makeEl(nb);
     nel.replaceChildren();
     while (el.firstChild) nel.appendChild(el.firstChild);
@@ -812,13 +830,16 @@ export class Editor {
 
   onPaste(e) {
     if (this.readonly) { e.preventDefault(); return; }
-    const text = e.clipboardData?.getData('text/plain');
-    if (text == null) return;
+    const raw = e.clipboardData?.getData('text/plain');
+    if (raw == null) return;
     e.preventDefault();
     this.snapshot();
 
-    if (!text.includes('\n')) {
-      document.execCommand('insertText', false, text);
+    // Eine einzelne Zeile — auch mit Zeilenende dahinter — geht in den Text.
+    const text = raw.replace(/\r\n?/g, '\n');
+    const single = text.replace(/\n+$/, '');
+    if (!single.includes('\n')) {
+      document.execCommand('insertText', false, single);
       return;
     }
 

@@ -34,19 +34,21 @@ export function parse(text) {
 
   const blocks = [];
   let i = 0;
-  let lead = 0;
 
   const step = detectStep(lines);
+
+  // Eine Leerzeile trennt zwei Bloecke. Jede weitere ist ein leerer Absatz:
+  // so bleibt sie im Editor zu sehen und geht beim Sichern nicht verloren.
+  const gap = (line) => ({ type: 'p', text: '', src: [line], trail: 0, dirty: false });
 
   const push = (b, start, end) => {
     let t = end;
     while (t < lines.length && blank(lines[t])) t++;
-    b.src = lines.slice(start - lead, end);
-    b.lead = lead;
-    b.trail = t - end;
+    b.src = lines.slice(start, end);
+    b.trail = Math.min(1, t - end);
     b.dirty = false;
     blocks.push(b);
-    lead = 0;
+    for (let k = end + 1; k < t; k++) blocks.push(gap(lines[k]));
     i = t;
   };
 
@@ -62,7 +64,7 @@ export function parse(text) {
     const start = i;
     const line = lines[i];
 
-    if (blank(line)) { lead++; i++; continue; }
+    if (blank(line)) { blocks.push(gap(line)); i++; continue; }
 
     let m;
 
@@ -154,10 +156,6 @@ export function parse(text) {
     push({ type: 'p', text: body.join('\n') }, start, j);
   }
 
-  // Leerzeilen am Dateiende gehoeren an den letzten Block.
-  if (lead > 0 && blocks.length) blocks[blocks.length - 1].trail += lead;
-  else if (lead > 0) blocks.push({ type: 'p', text: '', src: lines.slice(0, lead), lead: 0, trail: 0, dirty: false });
-
   return { blocks, finalNL, step };
 }
 
@@ -182,13 +180,6 @@ function splitRow(line) {
 // ----------------------------------------------------- Bloecke -> Zeilen
 
 export function blockToLines(b) {
-  const out = [];
-  for (let i = 0; i < (b.lead || 0); i++) out.push('');
-  out.push(...body(b));
-  return out;
-}
-
-function body(b) {
   switch (b.type) {
     case 'h':
       return ['#'.repeat(b.level) + ' ' + flat(b.text)];
@@ -245,7 +236,7 @@ function body(b) {
   }
 }
 
-const flat = (s) => (s || '').replace(/[ \t]*\n[ \t]*/g, ' ');
+const flat = (s) => (s || '').replace(/(?:[ \t]*\n)+[ \t]*/g, ' ');
 
 // ------------------------------------------------------- Inline -> HTML
 
@@ -280,17 +271,19 @@ export function inlineToHTML(md, ctx = {}) {
     if ((m = /^~~([\s\S]+?)~~/.exec(rest))) {
       out += '<s>' + inlineToHTML(m[1], ctx) + '</s>'; i += m[0].length; continue;
     }
-    if ((m = /^\*(?!\s)([^*\n]+?)(?<!\s)\*/.exec(rest))) {
+    if ((m = /^\*(?!\s)([^*]+?)(?<!\s)\*/.exec(rest))) {
       out += '<em>' + inlineToHTML(m[1], ctx) + '</em>'; i += m[0].length; continue;
     }
     // Unterstriche nur an Wortgrenzen, damit snake_case heil bleibt.
-    if ((m = /^_(?!\s)([^_\n]+?)(?<!\s)_(?!\w)/.exec(rest)) && !/\w/.test(prev())) {
+    if ((m = /^_(?!\s)([^_]+?)(?<!\s)_(?!\w)/.exec(rest)) && !/\w/.test(prev())) {
       out += '<em>' + inlineToHTML(m[1], ctx) + '</em>'; i += m[0].length; continue;
     }
     if (rest.startsWith('  \n') || rest.startsWith('\\\n')) {
-      out += '<br>'; i += rest[0] === '\\' ? 2 : 3; continue;
+      out += '<br>'; i += rest[0] === '\\' ? 2 : 3; i += indent(md, i); continue;
     }
-    if (rest[0] === '\n') { out += ' '; i += 1; continue; }
+    // Ein weicher Umbruch bleibt als Zeilenende im Text stehen: der Browser
+    // zeigt ihn als Leerzeichen, und die Datei behaelt ihre Zeilen.
+    if (rest[0] === '\n') { out += '\n'; i += 1; i += indent(md, i); continue; }
     if (rest[0] === '\\' && rest.length > 1 && /[\\`*_{}\[\]()#+\-.!>~|]/.test(rest[1])) {
       out += esc(rest[1]); i += 2; continue;
     }
@@ -298,6 +291,13 @@ export function inlineToHTML(md, ctx = {}) {
     out += esc(md[i]); i++;
   }
   return out;
+}
+
+// indent zaehlt die Leerzeichen am Anfang einer Folgezeile; sie sagen nichts.
+function indent(s, i) {
+  let n = 0;
+  while (s[i + n] === ' ' || s[i + n] === '\t') n++;
+  return n;
 }
 
 function assetURL(src, ctx) {
@@ -314,8 +314,9 @@ export function inlineFromDOM(node) {
   for (const c of node.childNodes) {
     if (c.nodeType === Node.TEXT_NODE) {
       // Browser setzen beim Tippen gern geschuetzte Leerzeichen — die haben
-      // in einer Markdown-Datei nichts verloren.
-      out += c.data.replace(/\u200B/g, '').replace(/\u00A0/g, ' ').replace(/[\r\n]+/g, ' ');
+      // in einer Markdown-Datei nichts verloren. Zeilenenden dagegen sind die
+      // weichen Umbrueche der Quelle und bleiben stehen.
+      out += c.data.replace(/\u200B/g, '').replace(/\u00A0/g, ' ').replace(/\r\n?/g, '\n');
       continue;
     }
     if (c.nodeType !== Node.ELEMENT_NODE) continue;
@@ -343,7 +344,12 @@ function wrapIf(mark, inner) {
   return inner.trim() === '' ? inner : mark + inner + mark;
 }
 
-// blockText liest den Inhalt eines Blockelements als Markdown.
+// blockText liest den Inhalt eines Blockelements als Markdown. Umbrueche am
+// Rand des Blocks fallen weg; stossen mehrere aufeinander, bleibt einer,
+// und ein harter schlaegt einen weichen.
 export function blockText(el) {
-  return inlineFromDOM(el).replace(/(?:[ \t]*\n)+$/, '').replace(/[ \t]+$/, '');
+  return inlineFromDOM(el)
+    .replace(/^(?:[ \t]*\n)+/, '')
+    .replace(/(?:[ \t]*\n)*[ \t]*$/, '')
+    .replace(/(?:[ \t]*\n){2,}/g, (run) => (run.includes('  \n') ? '  \n' : '\n'));
 }
